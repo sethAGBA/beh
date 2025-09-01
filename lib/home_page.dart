@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import 'package:beh/models/event.dart';
+import 'package:beh/event_creation_form.dart'; // Import the new form
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -13,7 +14,6 @@ class HomePage extends StatefulWidget {
 
 class _HomePageState extends State<HomePage> {
   String? _userName;
-  bool _isLoadingUserData = true;
 
   @override
   void initState() {
@@ -26,164 +26,282 @@ class _HomePageState extends State<HomePage> {
       User? user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-        if (userDoc.exists) {
+        if (userDoc.exists && mounted) {
           setState(() {
-            _userName = userDoc['fullName'];
+            _userName = userDoc['firstName'];
           });
         }
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erreur lors du chargement des données utilisateur: $e'),
-          ),
+          SnackBar(content: Text('Erreur (user data): ${e.toString()}')),
         );
       }
-    } finally {
-      setState(() {
-        _isLoadingUserData = false;
-      });
     }
   }
 
-  Future<void> _signOut() async {
-    print('Attempting to sign out...');
-    try {
-      await FirebaseAuth.instance.signOut();
-      print('Sign out successful!');
-      // Explicitly navigate to sign-in page after successful sign out
-      if (mounted) {
-        context.go('/signin');
-      }
-    } catch (e) {
-      print('Sign out failed: $e');
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erreur lors de la déconnexion: $e'),
-          ),
+  void _showCreateEventModal(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.8,
+          maxChildSize: 0.9,
+          minChildSize: 0.5,
+          expand: false,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.background,
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  // Modal Header
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Nouvel Événement',
+                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close),
+                          onPressed: () => Navigator.of(context).pop(),
+                        ),
+                      ],
+                    ),
+                  ),
+                  // Form
+                  Expanded(
+                    child: SingleChildScrollView(
+                      controller: scrollController,
+                      padding: const EdgeInsets.all(16.0),
+                      child: const EventCreationForm(),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         );
-      }
-    }
+      },
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final user = FirebaseAuth.instance.currentUser;
+
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.blue,
-        title: const Text("BEH", style: TextStyle(fontSize: 24, color: Colors.white)),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications, color: Colors.white),
-            onPressed: () {
-              // Handle notifications
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.settings, color: Colors.white),
-            onPressed: () {
-              // Handle settings
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.person, color: Colors.white),
-            onPressed: () {
-              context.go('/profile');
-            },
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: _signOut,
+      backgroundColor: colorScheme.background,
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance
+            .collection('events')
+            .where('userId', isEqualTo: user?.uid ?? '')
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting && _userName == null) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('Erreur: ${snapshot.error}'));
+          }
+
+          final events = snapshot.hasData ? snapshot.data!.docs.map((doc) => Event.fromFirestore(doc)).toList() : [];
+          final totalBudget = events.fold<double>(0.0, (sum, event) => sum + event.budget);
+
+          return CustomScrollView(
+            slivers: [
+              SliverAppBar(
+                pinned: true,
+                floating: false,
+                expandedHeight: 120.0,
+                backgroundColor: colorScheme.primary,
+                iconTheme: IconThemeData(color: colorScheme.onPrimary),
+                flexibleSpace: FlexibleSpaceBar(
+                  titlePadding: const EdgeInsets.only(left: 16, bottom: 16),
+                  title: Text(
+                    _userName != null ? 'Bonjour, $_userName' : 'Bienvenue',
+                    style: theme.textTheme.titleLarge?.copyWith(color: colorScheme.onPrimary, fontWeight: FontWeight.bold),
+                  ),
+                  background: Container(
+                    color: colorScheme.primary,
+                  ),
+                ),
+                actions: [
+                  IconButton(
+                    icon: const Icon(Icons.notifications_none),
+                    onPressed: () {},
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 16.0),
+                    child: GestureDetector(
+                      onTap: () => context.go('/profile'),
+                      child: CircleAvatar(
+                        backgroundColor: colorScheme.secondary,
+                        child: Text(
+                          _userName?.substring(0, 1).toUpperCase() ?? 'U',
+                          style: TextStyle(color: colorScheme.primary, fontWeight: FontWeight.bold),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Text(
+                    'Tableau de Bord',
+                    style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              SliverPadding(
+                padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                sliver: SliverGrid.count(
+                  crossAxisCount: 2,
+                  crossAxisSpacing: 16,
+                  mainAxisSpacing: 16,
+                  children: [
+                    _buildDashboardCard(context, Icons.event_note, 'Événements', events.length.toString()),
+                    _buildDashboardCard(context, Icons.attach_money, 'Budget Total', '${totalBudget.toStringAsFixed(0)} FCFA'),
+                  ],
+                ),
+              ),
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16.0, 24.0, 16.0, 8.0),
+                  child: Text(
+                    'Mes Événements',
+                    style: theme.textTheme.headlineMedium?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ),
+              if (events.isEmpty)
+                SliverToBoxAdapter(
+                  child: Center(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 40.0),
+                      child: Text('Aucun événement pour le moment.', style: theme.textTheme.bodyLarge),
+                    ),
+                  ),
+                )
+              else
+                SliverList(
+                  delegate: SliverChildBuilderDelegate(
+                    (context, index) {
+                      return _buildEventCard(context, events[index]);
+                    },
+                    childCount: events.length,
+                  ),
+                ),
+            ],
+          );
+        },
+      ),
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _showCreateEventModal(context),
+        label: const Text('Nouvel Événement'),
+        icon: const Icon(Icons.add),
+        backgroundColor: colorScheme.secondary,
+        foregroundColor: colorScheme.primary,
+      ),
+    );
+  }
+
+  Widget _buildDashboardCard(BuildContext context, IconData icon, String title, String value) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Container(
+      padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
           ),
         ],
       ),
-      body: _isLoadingUserData
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          CircleAvatar(
+            backgroundColor: colorScheme.primary.withOpacity(0.1),
+            child: Icon(icon, color: colorScheme.primary),
+          ),
+          const SizedBox(height: 8),
+          Text(title, style: theme.textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600)),
+          Text(value, style: theme.textTheme.headlineSmall?.copyWith(color: colorScheme.primary, fontWeight: FontWeight.bold)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildEventCard(BuildContext context, Event event) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return GestureDetector(
+      onTap: () => context.go('/event-details/${event.id}'),
+      child: Container(
+        margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+        padding: const EdgeInsets.all(16.0),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              event.eventName,
+              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            Row(
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Text(
-                    _userName != null ? 'Bienvenue, $_userName' : 'Bienvenue sur BEH',
-                    style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16.0),
-                  child: Text(
-                    'Vos événements de mariage :',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w500),
-                  ),
-                ),
-                Expanded(
-                  child: StreamBuilder<QuerySnapshot>(
-                    stream: FirebaseFirestore.instance
-                        .collection('events')
-                        .where('userId', isEqualTo: FirebaseAuth.instance.currentUser!.uid)
-                        .snapshots(),
-                    builder: (context, snapshot) {
-                      if (snapshot.connectionState == ConnectionState.waiting) {
-                        return const Center(child: CircularProgressIndicator());
-                      }
-                      if (snapshot.hasError) {
-                        return Center(child: Text('Erreur: ${snapshot.error}'));
-                      }
-                      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-                        return const Center(
-                          child: Text('Aucun événement créé pour le moment.'),
-                        );
-                      }
-
-                      final events = snapshot.data!.docs.map((doc) => Event.fromFirestore(doc)).toList();
-
-                      return ListView.builder(
-                        padding: const EdgeInsets.all(16.0),
-                        itemCount: events.length,
-                        itemBuilder: (context, index) {
-                          final event = events[index];
-                          return GestureDetector(
-                            onTap: () {
-                              context.go('/event-details/${event.id}');
-                            },
-                            child: Card(
-                              margin: const EdgeInsets.only(bottom: 16.0),
-                              elevation: 4,
-                              child: Padding(
-                                padding: const EdgeInsets.all(16.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      event.eventName,
-                                      style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                                    ),
-                                    const SizedBox(height: 8),
-                                    Text('Date: ${event.eventDate.toLocal().toString().split(' ')[0]}'),
-                                    Text('Lieu: ${event.location}'),
-                                    Text('Budget: ${event.budget.toStringAsFixed(2)} FCFA'),
-                                    if (event.description != null && event.description!.isNotEmpty)
-                                      Text('Description: ${event.description}'),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          );
-                        },
-                      );
-                    },
-                  ),
-                ),
+                Icon(Icons.calendar_today, size: 16, color: colorScheme.primary),
+                const SizedBox(width: 8),
+                Text(event.eventDate.toLocal().toString().split(' ')[0], style: theme.textTheme.bodyMedium),
               ],
             ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          context.go('/create-event');
-        },
-        child: const Icon(Icons.add, color: Colors.white),
-        backgroundColor: Colors.blue,
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Icon(Icons.location_on_outlined, size: 16, color: colorScheme.primary),
+                const SizedBox(width: 8),
+                Expanded(child: Text(event.location, style: theme.textTheme.bodyMedium, overflow: TextOverflow.ellipsis)),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerRight,
+              child: Text(
+                '${event.budget.toStringAsFixed(0)} FCFA',
+                style: theme.textTheme.titleMedium?.copyWith(fontWeight: FontWeight.bold, color: colorScheme.primary),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
