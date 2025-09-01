@@ -3,7 +3,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import 'package:beh/models/event.dart';
 import 'package:beh/models/guest.dart';
-import 'package:beh/models/vendor.dart'; // Added import
+import 'package:beh/models/vendor.dart';
+import 'package:beh/guest_form.dart';
+import 'package:beh/vendor_form.dart';
 
 class EventDetailsPage extends StatefulWidget {
   final String eventId;
@@ -16,18 +18,6 @@ class EventDetailsPage extends StatefulWidget {
 
 class _EventDetailsPageState extends State<EventDetailsPage> {
   late Future<Event> _eventFuture;
-  final _guestNameController = TextEditingController();
-  final _guestEmailController = TextEditingController();
-  final _guestPlusOneController = TextEditingController();
-  bool _isAddingGuest = false;
-
-  // Vendor controllers
-  final _vendorNameController = TextEditingController();
-  final _vendorServiceTypeController = TextEditingController();
-  final _vendorContactInfoController = TextEditingController();
-  final _vendorPriceController = TextEditingController();
-  final _vendorNotesController = TextEditingController();
-  bool _isAddingVendor = false;
 
   @override
   void initState() {
@@ -43,136 +33,114 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
     return Event.fromFirestore(doc);
   }
 
-  Future<void> _addGuest() async {
-    if (_guestNameController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Veuillez entrer le nom de l\'invité.')),
-      );
-      return;
-    }
+  void _showGuestModal(BuildContext context, {Guest? guest}) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: Container(
+          padding: const EdgeInsets.all(24.0),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  guest == null ? 'Ajouter un invité' : 'Modifier l\'invité',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 20),
+                GuestForm(guest: guest, eventId: widget.eventId),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-    setState(() {
-      _isAddingGuest = true;
-    });
+  void _showVendorModal(BuildContext context, {Vendor? vendor}) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (context) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
+        child: Container(
+          padding: const EdgeInsets.all(24.0),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  vendor == null ? 'Ajouter un prestataire' : 'Modifier le prestataire',
+                  style: Theme.of(context).textTheme.headlineSmall,
+                ),
+                const SizedBox(height: 20),
+                VendorForm(vendor: vendor, eventId: widget.eventId),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 
-    try {
-      final newGuest = Guest(
-        id: '', // Firestore will generate this
-        eventId: widget.eventId,
-        name: _guestNameController.text.trim(),
-        email: _guestEmailController.text.trim().isEmpty ? null : _guestEmailController.text.trim(),
-        plusOne: int.tryParse(_guestPlusOneController.text.trim()),
-      );
+  Future<void> _deleteGuest(Guest guest) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmer la suppression'),
+        content: Text('Voulez-vous vraiment supprimer l\'invité "${guest.name}" ?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Supprimer', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
 
+    if (confirmed == true) {
       await FirebaseFirestore.instance
           .collection('events')
           .doc(widget.eventId)
           .collection('guests')
-          .add(newGuest.toFirestore());
-
+          .doc(guest.id)
+          .delete();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Invité ajouté avec succès !')),
+          const SnackBar(content: Text('Invité supprimé.')),
         );
-        _guestNameController.clear();
-        _guestEmailController.clear();
-        _guestPlusOneController.clear();
-      }
-    } on FirebaseException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erreur lors de l\'ajout de l\'invité: ${e.message}')),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Une erreur inattendue est survenue: $e')),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isAddingGuest = false;
-          });
-        }
       }
     }
+  }
 
-  Future<void> _addVendor() async {
-    if (_vendorNameController.text.trim().isEmpty || _vendorServiceTypeController.text.trim().isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Veuillez entrer le nom et le type de service du prestataire.')),
-      );
-      return;
-    }
+  Future<void> _deleteVendor(Vendor vendor) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Confirmer la suppression'),
+        content: Text('Voulez-vous vraiment supprimer le prestataire "${vendor.name}" ?'),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(context).pop(false), child: const Text('Annuler')),
+          TextButton(onPressed: () => Navigator.of(context).pop(true), child: const Text('Supprimer', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+    );
 
-    setState(() {
-      _isAddingVendor = true;
-    });
-
-    try {
-      final newVendor = Vendor(
-        id: '', // Firestore will generate this
-        eventId: widget.eventId,
-        name: _vendorNameController.text.trim(),
-        serviceType: _vendorServiceTypeController.text.trim(),
-        contactInfo: _vendorContactInfoController.text.trim().isEmpty ? null : _vendorContactInfoController.text.trim(),
-        price: double.tryParse(_vendorPriceController.text.trim()),
-        notes: _vendorNotesController.text.trim().isEmpty ? null : _vendorNotesController.text.trim(),
-      );
-
+    if (confirmed == true) {
       await FirebaseFirestore.instance
           .collection('events')
           .doc(widget.eventId)
           .collection('vendors')
-          .add(newVendor.toFirestore());
-
+          .doc(vendor.id)
+          .delete();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Prestataire ajouté avec succès !')),
+          const SnackBar(content: Text('Prestataire supprimé.')),
         );
-        _vendorNameController.clear();
-        _vendorServiceTypeController.clear();
-        _vendorContactInfoController.clear();
-        _vendorPriceController.clear();
-        _vendorNotesController.clear();
-      }
-    } on FirebaseException catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Erreur lors de l\'ajout du prestataire: ${e.message}')),
-          );
-        }
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Une erreur inattendue est survenue: $e')),
-          );
-        }
-      } finally {
-        if (mounted) {
-          setState(() {
-            _isAddingVendor = false;
-          });
-        }
       }
     }
-
-  @override
-  void dispose() {
-    _guestNameController.dispose();
-    _guestEmailController.dispose();
-    _guestPlusOneController.dispose();
-    _vendorNameController.dispose();
-    _vendorServiceTypeController.dispose();
-    _vendorContactInfoController.dispose();
-    _vendorPriceController.dispose();
-    _vendorNotesController.dispose();
-    super.dispose();
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -183,19 +151,19 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Chargement...')) /*backgroundColor: Colors.blue removed*/,
+            appBar: AppBar(title: const Text('Chargement...')),
             body: const Center(child: CircularProgressIndicator()),
           );
         }
         if (snapshot.hasError) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Erreur')) /*backgroundColor: Colors.blue removed*/,
+            appBar: AppBar(title: const Text('Erreur')),
             body: Center(child: Text('Erreur: ${snapshot.error}')),
           );
         }
         if (!snapshot.hasData) {
           return Scaffold(
-            appBar: AppBar(title: const Text('Introuvable')) /*backgroundColor: Colors.blue removed*/,
+            appBar: AppBar(title: const Text('Introuvable')),
             body: const Center(child: Text('Événement introuvable.')),
           );
         }
@@ -221,7 +189,6 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
                 onPressed: () => context.go('/profile'),
               ),
             ],
-            /*backgroundColor: Colors.blue removed*/
           ),
           body: SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
@@ -245,83 +212,13 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
                   ),
                 const Divider(height: 40),
                 
-                // Guest Management Section
-                _buildSectionTitle(theme, 'Gestion des invités'),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: _guestNameController,
-                  decoration: const InputDecoration(labelText: 'Nom de l\'invité'),
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _guestEmailController,
-                  decoration: const InputDecoration(labelText: 'Email (optionnel)'),
-                  keyboardType: TextInputType.emailAddress,
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _guestPlusOneController,
-                  decoration: const InputDecoration(labelText: 'Accompagnants (+1, optionnel)'),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _isAddingGuest ? null : _addGuest,
-                    child: _isAddingGuest
-                        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2)) 
-                        : const Text('Ajouter un invité'),
-                  ),
-                ),
-                const Divider(height: 40),
-                _buildSectionTitle(theme, 'Liste des invités'),
+                _buildSectionHeader(theme, 'Invités', () => _showGuestModal(context)),
                 const SizedBox(height: 10),
                 _buildGuestList(),
 
                 const Divider(height: 40),
 
-                // Vendor Management Section
-                _buildSectionTitle(theme, 'Gestion des prestataires'),
-                const SizedBox(height: 20),
-                TextFormField(
-                  controller: _vendorNameController,
-                  decoration: const InputDecoration(labelText: 'Nom du prestataire'),
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _vendorServiceTypeController,
-                  decoration: const InputDecoration(labelText: 'Type de service (ex: Photographe)'),
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _vendorContactInfoController,
-                  decoration: const InputDecoration(labelText: 'Contact (optionnel)'),
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _vendorPriceController,
-                  decoration: const InputDecoration(labelText: 'Prix (optionnel)'),
-                  keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 10),
-                TextFormField(
-                  controller: _vendorNotesController,
-                  decoration: const InputDecoration(labelText: 'Notes (optionnel)'),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 20),
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton(
-                    onPressed: _isAddingVendor ? null : _addVendor,
-                    child: _isAddingVendor
-                        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(strokeWidth: 2))
-                        : const Text('Ajouter un prestataire'),
-                  ),
-                ),
-                const Divider(height: 40),
-                _buildSectionTitle(theme, 'Liste des prestataires'),
+                _buildSectionHeader(theme, 'Prestataires', () => _showVendorModal(context)),
                 const SizedBox(height: 10),
                 _buildVendorList(),
               ],
@@ -342,10 +239,19 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
     );
   }
 
-  Widget _buildSectionTitle(ThemeData theme, String title) {
-    return Text(
-      title,
-      style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+  Widget _buildSectionHeader(ThemeData theme, String title, VoidCallback onAddPressed) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          title,
+          style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+        ),
+        IconButton(
+          icon: Icon(Icons.add_circle, color: theme.colorScheme.primary),
+          onPressed: onAddPressed,
+        ),
+      ],
     );
   }
 
@@ -382,21 +288,18 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
                 subtitle: (guest.email != null && guest.email!.isNotEmpty)
                     ? Text(guest.email!)
                     : null,
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                  onPressed: () async {
-                    await FirebaseFirestore.instance
-                        .collection('events')
-                        .doc(widget.eventId)
-                        .collection('guests')
-                        .doc(guest.id)
-                        .delete();
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Invité supprimé.')),
-                      );
-                    }
-                  },
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.edit_outlined, color: Theme.of(context).colorScheme.primary),
+                      onPressed: () => _showGuestModal(context, guest: guest),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      onPressed: () => _deleteGuest(guest),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -437,21 +340,18 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
               child: ListTile(
                 title: Text(vendor.name),
                 subtitle: Text(vendor.serviceType),
-                trailing: IconButton(
-                  icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
-                  onPressed: () async {
-                    await FirebaseFirestore.instance
-                        .collection('events')
-                        .doc(widget.eventId)
-                        .collection('vendors')
-                        .doc(vendor.id)
-                        .delete();
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Prestataire supprimé.')),
-                      );
-                    }
-                  },
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    IconButton(
+                      icon: Icon(Icons.edit_outlined, color: Theme.of(context).colorScheme.primary),
+                      onPressed: () => _showVendorModal(context, vendor: vendor),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline, color: Colors.redAccent),
+                      onPressed: () => _deleteVendor(vendor),
+                    ),
+                  ],
                 ),
               ),
             );
@@ -461,4 +361,3 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
     );
   }
 }
-    

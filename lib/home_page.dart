@@ -41,7 +41,8 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  void _showCreateEventModal(BuildContext context) {
+  // MODIFIED: Now accepts an optional Event for editing
+  void _showCreateEventModal(BuildContext context, {Event? event}) {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -67,7 +68,8 @@ class _HomePageState extends State<HomePage> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'Nouvel Événement',
+                          // MODIFIED: Title changes for editing
+                          event == null ? 'Nouvel Événement' : 'Modifier l\'événement',
                           style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         IconButton(
@@ -82,7 +84,8 @@ class _HomePageState extends State<HomePage> {
                     child: SingleChildScrollView(
                       controller: scrollController,
                       padding: const EdgeInsets.all(16.0),
-                      child: const EventCreationForm(),
+                      // MODIFIED: Pass the event to the form
+                      child: EventCreationForm(event: event),
                     ),
                   ),
                 ],
@@ -93,6 +96,47 @@ class _HomePageState extends State<HomePage> {
       },
     );
   }
+
+  // NEW: Function to handle event deletion
+  Future<void> _deleteEvent(BuildContext context, Event event) async {
+    final bool? confirmed = await showDialog<bool>(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: const Text('Confirmer la suppression'),
+          content: Text('Voulez-vous vraiment supprimer l\'événement "${event.eventName}" ?'),
+          actions: <Widget>[
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: const Text('Annuler'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: const Text('Supprimer', style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true) {
+      try {
+        await FirebaseFirestore.instance.collection('events').doc(event.id).delete();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Événement supprimé avec succès.')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Erreur lors de la suppression: ${e.toString()}')),
+          );
+        }
+      }
+    }
+  }
+
 
   @override
   Widget build(BuildContext context) {
@@ -209,6 +253,7 @@ class _HomePageState extends State<HomePage> {
         },
       ),
       floatingActionButton: FloatingActionButton.extended(
+        // MODIFIED: Pass null for event to indicate creation
         onPressed: () => _showCreateEventModal(context),
         label: const Text('Nouvel Événement'),
         icon: const Icon(Icons.add),
@@ -250,6 +295,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  // MODIFIED: Added PopupMenuButton for edit/delete actions
   Widget _buildEventCard(BuildContext context, Event event) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
@@ -272,9 +318,42 @@ class _HomePageState extends State<HomePage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              event.eventName,
-              style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Text(
+                    event.eventName,
+                    style: theme.textTheme.titleLarge?.copyWith(fontWeight: FontWeight.bold),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                PopupMenuButton<String>(
+                  onSelected: (value) {
+                    if (value == 'edit') {
+                      _showCreateEventModal(context, event: event);
+                    } else if (value == 'delete') {
+                      _deleteEvent(context, event);
+                    }
+                  },
+                  itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+                    const PopupMenuItem<String>(
+                      value: 'edit',
+                      child: ListTile(
+                        leading: Icon(Icons.edit_outlined),
+                        title: Text('Modifier'),
+                      ),
+                    ),
+                    const PopupMenuItem<String>(
+                      value: 'delete',
+                      child: ListTile(
+                        leading: Icon(Icons.delete_outline, color: Colors.red),
+                        title: Text('Supprimer', style: TextStyle(color: Colors.red)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
             const SizedBox(height: 12),
             Row(
