@@ -221,9 +221,56 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
                 _buildSectionHeader(theme, 'Prestataires', () => _showVendorModal(context)),
                 const SizedBox(height: 10),
                 _buildVendorList(),
+
+                const Divider(height: 40),
+
+                _buildSectionHeader(theme, 'Prestations', () {
+                  context.go('/event-details/${widget.eventId}/prestations');
+                }),
+                const SizedBox(height: 10),
+                _buildPrestationList(),
               ],
             ),
           ),
+        );
+      },
+    );
+  }
+
+  Widget _buildPrestationList() {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('events')
+          .doc(widget.eventId)
+          .collection('selected_prestations')
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError) {
+          return Center(child: Text('Erreur: ${snapshot.error}'));
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(child: Padding(padding: EdgeInsets.all(20.0), child: Text('Aucune prestation sélectionnée.')));
+        }
+
+        return ListView.builder(
+          shrinkWrap: true,
+          physics: const NeverScrollableScrollPhysics(),
+          itemCount: snapshot.data!.docs.length,
+          itemBuilder: (context, index) {
+            final doc = snapshot.data!.docs[index];
+            final data = doc.data() as Map<String, dynamic>;
+            return Card(
+              margin: const EdgeInsets.only(bottom: 10.0),
+              child: ListTile(
+                title: Text(data['name'] ?? 'Prestation'),
+                subtitle: Text('Quantité: ${data['quantity']}'),
+                trailing: Text('${data['totalPrice']} FCFA'),
+              ),
+            );
+          },
         );
       },
     );

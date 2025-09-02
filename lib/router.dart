@@ -1,3 +1,5 @@
+import 'package:beh/order_summary_page.dart';
+import 'package:beh/prestation_selection_page.dart';
 import 'package:beh/event_creation_page.dart';
 import 'package:beh/event_details_page.dart';
 import 'package:beh/home_page.dart';
@@ -85,6 +87,28 @@ final GoRouter router = GoRouter(
         }
         return EventDetailsPage(eventId: eventId);
       },
+      routes: [
+        GoRoute(
+          path: 'prestations',
+          builder: (context, state) {
+            final eventId = state.pathParameters['eventId'];
+            if (eventId == null) {
+              return const Text('Error: Event ID not found');
+            }
+            return PrestationSelectionPage(eventId: eventId);
+          },
+        ),
+        GoRoute(
+          path: 'summary',
+          builder: (context, state) {
+            final eventId = state.pathParameters['eventId'];
+            if (eventId == null) {
+              return const Text('Error: Event ID not found');
+            }
+            return OrderSummaryPage(eventId: eventId);
+          },
+        ),
+      ]
     ),
   ],
   refreshListenable: GoRouterRefreshStream(FirebaseAuth.instance.authStateChanges()), // Added this line

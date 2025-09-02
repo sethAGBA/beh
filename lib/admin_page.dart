@@ -173,15 +173,18 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
     }
   }
 
-  Future<void> _addService(String name, double price) async {
+  Future<void> _addService(String name, double price, String category, String description, String imageUrl) async {
     try {
       final doc = await _servicesRef.add({
         'name': name,
         'price': price,
+        'category': category,
+        'description': description,
+        'imageUrl': imageUrl,
         'available': true,
         'createdAt': FieldValue.serverTimestamp(),
       });
-      await _logAction('add_service', target: doc.id, details: {'name': name, 'price': price});
+      await _logAction('add_service', target: doc.id, details: {'name': name, 'price': price, 'category': category});
       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Prestation ajoutée')));
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
@@ -431,12 +434,13 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
                   final name = data['name'] ?? '—';
                   final price = (data['price'] is num) ? (data['price'] as num).toDouble() : 0.0;
                   final available = data['available'] ?? true;
+                  final category = data['category'] ?? 'Non classé';
                   return ListTile(
                     title: Text(name),
-                    subtitle: Text('${price.toStringAsFixed(0)} FCFA'),
+                    subtitle: Text('$category - ${price.toStringAsFixed(0)} FCFA'),
                     trailing: Row(mainAxisSize: MainAxisSize.min, children: [
                       IconButton(icon: Icon(available ? Icons.visibility : Icons.visibility_off), onPressed: () => _updateService(d.id, {'available': !available})),
-                      IconButton(icon: const Icon(Icons.edit_outlined), onPressed: () => _showEditServiceDialog(d.id, name, price)),
+                      IconButton(icon: const Icon(Icons.edit_outlined), onPressed: () => _showEditServiceDialog(d.id, data)),
                     ]),
                   );
                 },
@@ -451,22 +455,57 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
   void _showAddServiceDialog() {
     final nameCtl = TextEditingController();
     final priceCtl = TextEditingController();
+    final descCtl = TextEditingController();
+    final imgCtl = TextEditingController();
+    String selectedCategory = 'décoration';
+
+    final categories = [
+      'décoration',
+      'nourriture_africaine_entree',
+      'nourriture_africaine_plat',
+      'nourriture_africaine_dessert',
+      'nourriture_europeenne_entree',
+      'nourriture_europeenne_plat',
+      'nourriture_europeenne_dessert',
+    ];
+
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Ajouter prestation'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: nameCtl, decoration: const InputDecoration(labelText: 'Nom')),
-          TextField(controller: priceCtl, decoration: const InputDecoration(labelText: 'Prix'), keyboardType: TextInputType.number),
-        ]),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: nameCtl, decoration: const InputDecoration(labelText: 'Nom')),
+            TextField(controller: priceCtl, decoration: const InputDecoration(labelText: 'Prix'), keyboardType: TextInputType.number),
+            TextField(controller: descCtl, decoration: const InputDecoration(labelText: 'Description')),
+            TextField(controller: imgCtl, decoration: const InputDecoration(labelText: 'URL de l\'image')),
+            DropdownButtonFormField<String>(
+              value: selectedCategory,
+              items: categories.map((String category) {
+                return DropdownMenuItem<String>(
+                  value: category,
+                  child: Text(category),
+                );
+              }).toList(),
+              onChanged: (newValue) {
+                selectedCategory = newValue!;
+              },
+              decoration: const InputDecoration(labelText: 'Catégorie'),
+            ),
+          ]),
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
           TextButton(
             onPressed: () {
               final name = nameCtl.text.trim();
               final price = double.tryParse(priceCtl.text.trim()) ?? 0.0;
+              final description = descCtl.text.trim();
+              final imageUrl = imgCtl.text.trim();
               Navigator.of(context).pop();
-              if (name.isNotEmpty) _addService(name, price);
+              if (name.isNotEmpty) {
+                _addService(name, price, selectedCategory, description, imageUrl);
+              }
             },
             child: const Text('Ajouter'),
           ),
@@ -475,24 +514,63 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
     );
   }
 
-  void _showEditServiceDialog(String id, String name, double price) {
-    final nameCtl = TextEditingController(text: name);
-    final priceCtl = TextEditingController(text: price.toString());
+  void _showEditServiceDialog(String id, Map<String, dynamic> data) {
+    final nameCtl = TextEditingController(text: data['name']);
+    final priceCtl = TextEditingController(text: data['price'].toString());
+    final descCtl = TextEditingController(text: data['description']);
+    final imgCtl = TextEditingController(text: data['imageUrl']);
+    String selectedCategory = data['category'] ?? 'décoration';
+
+    final categories = [
+      'décoration',
+      'nourriture_africaine_entree',
+      'nourriture_africaine_plat',
+      'nourriture_africaine_dessert',
+      'nourriture_europeenne_entree',
+      'nourriture_europeenne_plat',
+      'nourriture_europeenne_dessert',
+    ];
+
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Modifier prestation'),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextField(controller: nameCtl, decoration: const InputDecoration(labelText: 'Nom')),
-          TextField(controller: priceCtl, decoration: const InputDecoration(labelText: 'Prix'), keyboardType: TextInputType.number),
-        ]),
+        content: SingleChildScrollView(
+          child: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: nameCtl, decoration: const InputDecoration(labelText: 'Nom')),
+            TextField(controller: priceCtl, decoration: const InputDecoration(labelText: 'Prix'), keyboardType: TextInputType.number),
+            TextField(controller: descCtl, decoration: const InputDecoration(labelText: 'Description')),
+            TextField(controller: imgCtl, decoration: const InputDecoration(labelText: 'URL de l\'image')),
+            DropdownButtonFormField<String>(
+              value: selectedCategory,
+              items: categories.map((String category) {
+                return DropdownMenuItem<String>(
+                  value: category,
+                  child: Text(category),
+                );
+              }).toList(),
+              onChanged: (newValue) {
+                selectedCategory = newValue!;
+              },
+              decoration: const InputDecoration(labelText: 'Catégorie'),
+            ),
+          ]),
+        ),
         actions: [
           TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
           TextButton(onPressed: () {
-            final n = nameCtl.text.trim();
-            final p = double.tryParse(priceCtl.text.trim()) ?? price;
+            final name = nameCtl.text.trim();
+            final price = double.tryParse(priceCtl.text.trim()) ?? 0.0;
+            final description = descCtl.text.trim();
+            final imageUrl = imgCtl.text.trim();
             Navigator.of(context).pop();
-            _updateService(id, {'name': n, 'price': p});
+            _updateService(id, {
+              'name': name,
+              'price': price,
+              'category': selectedCategory,
+              'description': description,
+              'imageUrl': imageUrl,
+            });
           }, child: const Text('Enregistrer')),
         ],
       ),
