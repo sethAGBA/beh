@@ -4,6 +4,7 @@ import 'package:beh/home_page.dart';
 import 'package:beh/sign_in.dart';
 import 'package:beh/sign_up.dart';
 import 'package:beh/profile_page.dart';
+import 'package:beh/admin_page.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/material.dart';
@@ -66,6 +67,10 @@ final GoRouter router = GoRouter(
     GoRoute(
       path: '/profile',
       builder: (context, state) => const ProfilePage(),
+    ),
+    GoRoute(
+      path: '/admin',
+      builder: (context, state) => const AdminPage(),
     ),
     GoRoute(
       path: '/create-event',

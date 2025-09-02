@@ -19,6 +19,7 @@ class _SignUpScreenState extends State<SignUpScreen>
   final _firstNameController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _isLoading = false;
+  String _selectedRole = 'user';
   bool _obscurePassword = true;
   bool _obscureConfirmPassword = true;
   bool _acceptTerms = false;
@@ -138,15 +139,26 @@ class _SignUpScreenState extends State<SignUpScreen>
 
       // Store user data in Cloud Firestore
       if (userCredential.user != null) {
+        final uid = userCredential.user!.uid;
         await FirebaseFirestore.instance
             .collection('users')
-            .doc(userCredential.user!.uid)
+            .doc(uid)
             .set({
           'fullName': _fullNameController.text.trim(),
           'firstName': _firstNameController.text.trim(),
           'email': _emailController.text.trim(),
+          'role': _selectedRole,
           'createdAt': Timestamp.now(),
         });
+
+        // If role is admin, keep admins collection in sync
+        if (_selectedRole == 'admin') {
+          await FirebaseFirestore.instance.collection('admins').doc(uid).set({
+            'email': _emailController.text.trim(),
+            'createdAt': Timestamp.now(),
+            'createdBy': uid,
+          });
+        }
 
         // Update user profile
         await userCredential.user!.updateDisplayName(
@@ -401,6 +413,23 @@ class _SignUpScreenState extends State<SignUpScreen>
                           hint: 'Jean',
                           icon: Icons.person_outline,
                           validator: (value) => _validateName(value, 'prénom'),
+                        ),
+                        const SizedBox(height: 16),
+
+                        // Role selection
+                        DropdownButtonFormField<String>(
+                          value: _selectedRole,
+                          decoration: InputDecoration(
+                            filled: true,
+                            fillColor: Colors.white,
+                            border: OutlineInputBorder(borderRadius: BorderRadius.circular(16), borderSide: BorderSide.none),
+                          ),
+                          items: const [
+                            DropdownMenuItem(value: 'user', child: Text('Utilisateur')), 
+                            DropdownMenuItem(value: 'vendor', child: Text('Prestataire')),
+                            DropdownMenuItem(value: 'admin', child: Text('Administrateur')),
+                          ],
+                          onChanged: (v) => setState(() => _selectedRole = v ?? 'user'),
                         ),
                         const SizedBox(height: 16),
 

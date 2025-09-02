@@ -27,8 +27,19 @@ class _HomePageState extends State<HomePage> {
       if (user != null) {
         DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
         if (userDoc.exists && mounted) {
+          final data = userDoc.data() as Map<String, dynamic>? ?? {};
+          final role = data['role'] ?? '';
+          // If user is admin, redirect to admin screen
+          if (role == 'admin' || role == 'superadmin') {
+            if (mounted) {
+              // Use GoRouter to navigate and replace current
+              GoRouter.of(context).go('/admin');
+            }
+            return;
+          }
+
           setState(() {
-            _userName = userDoc['firstName'];
+            _userName = data['firstName'];
           });
         }
       }
@@ -126,6 +137,7 @@ class _HomePageState extends State<HomePage> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Événement supprimé avec succès.')),
           );
+          
         }
       } catch (e) {
         if (mounted) {
@@ -135,6 +147,13 @@ class _HomePageState extends State<HomePage> {
         }
       }
     }
+  }
+
+  // NEW: Pull-to-refresh handler
+  Future<void> _handleRefresh() async {
+    await _fetchUserData();
+    // Small delay to show the refresh indicator
+    await Future.delayed(const Duration(milliseconds: 300));
   }
 
 
@@ -162,7 +181,9 @@ class _HomePageState extends State<HomePage> {
           final events = snapshot.hasData ? snapshot.data!.docs.map((doc) => Event.fromFirestore(doc)).toList() : [];
           final totalBudget = events.fold<double>(0.0, (sum, event) => sum + event.budget);
 
-          return CustomScrollView(
+          return RefreshIndicator(
+            onRefresh: _handleRefresh,
+            child: CustomScrollView(
             slivers: [
               SliverAppBar(
                 pinned: true,
@@ -249,6 +270,7 @@ class _HomePageState extends State<HomePage> {
                   ),
                 ),
             ],
+            ),
           );
         },
       ),
