@@ -164,6 +164,16 @@ class _ConferenceFormState extends State<ConferenceForm> {
     await checklistBatch.commit();
 
     if (mounted) {
+      // Notify admin
+      await FirebaseFirestore.instance.collection('admin_notifications').add({
+        'type': 'new_event',
+        'eventId': eventRef.id,
+        'eventType': 'conference',
+        'eventName': eventName,
+        'createdAt': FieldValue.serverTimestamp(),
+      });
+      await FirebaseFirestore.instance.collection('admin_meta').doc('notifications').set({'unreadEvents': FieldValue.increment(1)}, SetOptions(merge: true));
+
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Conférence créée avec succès !')),
       );

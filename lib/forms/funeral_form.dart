@@ -147,6 +147,16 @@ class _FuneralFormState extends State<FuneralForm> {
           }
           await checklistBatch.commit();
 
+          // Notify admin
+          await FirebaseFirestore.instance.collection('admin_notifications').add({
+            'type': 'new_event',
+            'eventId': eventRef.id,
+            'eventType': 'funerailles',
+            'eventName': eventName,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          await FirebaseFirestore.instance.collection('admin_meta').doc('notifications').set({'unreadEvents': FieldValue.increment(1)}, SetOptions(merge: true));
+
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Cérémonie funéraire créée avec succès.')),

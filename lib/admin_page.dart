@@ -34,6 +34,54 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
     _checkAuthorization();
   }
 
+  Future<void> _showAdminNotifications() async {
+    final parentContext = context;
+    try {
+      final q = await FirebaseFirestore.instance.collection('admin_notifications').orderBy('createdAt', descending: true).limit(50).get();
+      final docs = q.docs;
+      if (!mounted) return;
+
+      showDialog<void>(
+        context: parentContext,
+        builder: (context) => AlertDialog(
+          title: const Text('Notifications administrateur'),
+          content: SizedBox(
+            width: double.maxFinite,
+            child: docs.isEmpty
+                ? const Text('Aucune notification')
+                : ListView.builder(
+                    shrinkWrap: true,
+                    itemCount: docs.length,
+                    itemBuilder: (c, i) {
+                      final d = docs[i];
+                      final data = (d.data() as Map<String, dynamic>?) ?? {};
+                      final when = _formatTimestamp(data['createdAt']);
+                      return ListTile(
+                        title: Text(data['eventName'] ?? data['type'] ?? 'Notification'),
+                        subtitle: Text('${data['eventType'] ?? ''} • $when'),
+                        trailing: IconButton(icon: const Icon(Icons.delete), onPressed: () async {
+                          await FirebaseFirestore.instance.collection('admin_notifications').doc(d.id).delete();
+                          setState(() {});
+                        }),
+                      );
+                    },
+                  ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Fermer')),
+            TextButton(onPressed: () async {
+              // Mark all as read by resetting counter
+              await FirebaseFirestore.instance.collection('admin_meta').doc('notifications').set({'unreadEvents': 0}, SetOptions(merge: true));
+              if (mounted) Navigator.of(context).pop();
+            }, child: const Text('Marquer tout lu')),
+          ],
+        ),
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur notifications: ${e.toString()}')));
+    }
+  }
+
   @override
   void dispose() {
     _tabController.dispose();
@@ -1099,6 +1147,22 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
           ],
         ),
         actions: [
+          // Notifications badge
+          StreamBuilder<DocumentSnapshot>(
+            stream: FirebaseFirestore.instance.collection('admin_meta').doc('notifications').snapshots(),
+            builder: (context, snap) {
+              final data = snap.data?.data() as Map<String, dynamic>? ?? {};
+              final unread = (data['unreadEvents'] as num?)?.toInt() ?? 0;
+              return Stack(
+                alignment: Alignment.center,
+                children: [
+                  IconButton(onPressed: _showAdminNotifications, icon: const Icon(Icons.notifications_none)),
+                  if (unread > 0)
+                    Positioned(right: 8, top: 8, child: Container(padding: const EdgeInsets.all(6), decoration: BoxDecoration(color: Colors.red, shape: BoxShape.circle), child: Text(unread.toString(), style: const TextStyle(color: Colors.white, fontSize: 12)))),
+                ],
+              );
+            },
+          ),
           IconButton(onPressed: () => context.push('/profile'), icon: const Icon(Icons.person)),
           IconButton(onPressed: _signOut, icon: const Icon(Icons.logout)),
           IconButton(onPressed: _showAddAdminDialog, icon: const Icon(Icons.person_add)),

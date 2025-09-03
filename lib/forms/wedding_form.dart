@@ -154,6 +154,16 @@ class _WeddingFormState extends State<WeddingForm> {
           }
           await checklistBatch.commit();
 
+          // Notify admin: add notification record and increment unread counter
+          await FirebaseFirestore.instance.collection('admin_notifications').add({
+            'type': 'new_event',
+            'eventId': eventRef.id,
+            'eventType': 'mariage',
+            'eventName': eventName,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          await FirebaseFirestore.instance.collection('admin_meta').doc('notifications').set({'unreadEvents': FieldValue.increment(1)}, SetOptions(merge: true));
+
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Événement de mariage créé avec succès !')),

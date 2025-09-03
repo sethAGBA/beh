@@ -120,7 +120,17 @@ class _EventCreationFormState extends State<EventCreationForm> {
       eventType: widget.event?.eventType ?? 'general',
     );
 
-    await FirebaseFirestore.instance.collection('events').add(newEvent.toFirestore());
+    final eventRef = await FirebaseFirestore.instance.collection('events').add(newEvent.toFirestore());
+
+    // Notify admin
+    await FirebaseFirestore.instance.collection('admin_notifications').add({
+      'type': 'new_event',
+      'eventId': eventRef.id,
+      'eventType': newEvent.eventType,
+      'eventName': newEvent.eventName,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+    await FirebaseFirestore.instance.collection('admin_meta').doc('notifications').set({'unreadEvents': FieldValue.increment(1)}, SetOptions(merge: true));
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(

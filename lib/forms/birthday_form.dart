@@ -152,6 +152,16 @@ class _BirthdayFormState extends State<BirthdayForm> {
           }
           await checklistBatch.commit();
 
+          // Notify admin
+          await FirebaseFirestore.instance.collection('admin_notifications').add({
+            'type': 'new_event',
+            'eventId': eventRef.id,
+            'eventType': 'anniversaire',
+            'eventName': eventName,
+            'createdAt': FieldValue.serverTimestamp(),
+          });
+          await FirebaseFirestore.instance.collection('admin_meta').doc('notifications').set({'unreadEvents': FieldValue.increment(1)}, SetOptions(merge: true));
+
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Événement d\'anniversaire créé avec succès !')),
