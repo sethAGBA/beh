@@ -19,7 +19,8 @@ class _FuneralFormState extends State<FuneralForm> {
     super.initState();
     final doc = widget.eventDoc;
     if (doc != null) {
-      final data = doc.data() as Map<String, dynamic>? ?? {};
+      final raw = doc.data();
+      final data = (raw is Map<String, dynamic>) ? raw : <String, dynamic>{};
       _deceasedNameController.text = (data['deceasedName'] ?? '') as String;
       _locationController.text = (data['location'] ?? '') as String;
       _contactNameController.text = (data['contactName'] ?? '') as String;

@@ -33,7 +33,8 @@ class _ConferenceFormState extends State<ConferenceForm> {
     super.initState();
     final doc = widget.eventDoc;
     if (doc != null) {
-      final data = doc.data() as Map<String, dynamic>? ?? {};
+      final raw = doc.data();
+      final data = (raw is Map<String, dynamic>) ? raw : <String, dynamic>{};
       _titleController.text = (data['eventName'] ?? '') as String;
       _companyNameController.text = (data['companyName'] ?? '') as String;
       _attendeeCountController.text = data['attendeeCount']?.toString() ?? '';

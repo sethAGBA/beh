@@ -32,7 +32,8 @@ class _BirthdayFormState extends State<BirthdayForm> {
     super.initState();
     final doc = widget.eventDoc;
     if (doc != null) {
-      final data = doc.data() as Map<String, dynamic>? ?? {};
+      final raw = doc.data();
+      final data = (raw is Map<String, dynamic>) ? raw : <String, dynamic>{};
       _personNameController.text = (data['personName'] ?? '') as String;
       _ageController.text = data['ageTurning']?.toString() ?? '';
       _guestCountController.text = data['guestCount']?.toString() ?? '';

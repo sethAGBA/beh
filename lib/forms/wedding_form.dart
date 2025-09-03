@@ -20,7 +20,8 @@ class _WeddingFormState extends State<WeddingForm> {
     super.initState();
     final doc = widget.eventDoc;
     if (doc != null) {
-      final data = doc.data() as Map<String, dynamic>? ?? {};
+      final raw = doc.data();
+      final data = (raw is Map<String, dynamic>) ? raw : <String, dynamic>{};
       _brideNameController.text = (data['brideName'] ?? '') as String;
       _groomNameController.text = (data['groomName'] ?? '') as String;
       _guestCountController.text = data['guestCount']?.toString() ?? '';

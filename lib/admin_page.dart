@@ -7,6 +7,7 @@ import 'package:beh/models/service.dart';
 import 'package:beh/models/event.dart';
 import 'package:beh/event_details_page.dart';
 import 'package:beh/event_creation_page.dart';
+import 'package:intl/intl.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -279,11 +280,15 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
   }
 
   Widget _buildDashboard() {
+    // Fetch counts, recent transactions and events in parallel
+    final nowTs = Timestamp.fromDate(DateTime.now());
     return FutureBuilder<List<dynamic>>(
       future: Future.wait([
         FirebaseFirestore.instance.collection('events').get().then((q) => q.size),
         FirebaseFirestore.instance.collection('users').get().then((q) => q.size),
-        _transactionsRef.get().then((q) => q.docs),
+        _transactionsRef.orderBy('timestamp', descending: true).limit(50).get().then((q) => q.docs),
+        FirebaseFirestore.instance.collection('events').orderBy('createdAt', descending: true).limit(5).get().then((q) => q.docs),
+        FirebaseFirestore.instance.collection('events').where('eventDate', isGreaterThanOrEqualTo: nowTs).orderBy('eventDate').limit(5).get().then((q) => q.docs),
       ]),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
@@ -292,11 +297,19 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
         final eventsCount = snapshot.data?[0] ?? 0;
         final usersCount = snapshot.data?[1] ?? 0;
         final transactions = snapshot.data?[2] as List<QueryDocumentSnapshot>? ?? [];
+        final recentEvents = snapshot.data?[3] as List<QueryDocumentSnapshot>? ?? [];
+        final upcomingEvents = snapshot.data?[4] as List<QueryDocumentSnapshot>? ?? [];
+
         double totalRevenue = 0;
         for (final t in transactions) {
           final tRaw = t.data();
           final val = (tRaw is Map<String, dynamic>) ? tRaw['amount'] : null;
           totalRevenue += _parseAmount(val);
+        }
+
+        String _formatCurrency(double v) {
+          final fmt = NumberFormat.decimalPattern('fr_FR');
+          return '${fmt.format(v)} FCFA';
         }
 
         return RefreshIndicator(
@@ -308,17 +321,99 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Tableau de bord', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Theme.of(context).colorScheme.onPrimary)),
-                  const SizedBox(height: 16),
+                  Text('Tableau de bord', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
+                  const SizedBox(height: 12),
+
+                  // Key metrics
                   Wrap(
                     spacing: 16,
                     runSpacing: 16,
                     children: [
                       _infoCard('Événements', eventsCount.toString()),
                       _infoCard('Utilisateurs', usersCount.toString()),
-                      _infoCard('Revenu total', '${totalRevenue.toStringAsFixed(0)} FCFA'),
+                      _infoCard('Revenu total', _formatCurrency(totalRevenue)),
+                      _infoCard('Événements à venir', upcomingEvents.length.toString()),
                     ],
                   ),
+
+                  const SizedBox(height: 20),
+
+                  // Recent events
+                  Text('Événements récents', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: Column(children: [
+                        if (recentEvents.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('Aucun événement récent.')),
+                        if (recentEvents.isNotEmpty)
+                          ...recentEvents.map((d) {
+                            final data = d.data() as Map<String, dynamic>? ?? {};
+                            final name = data['eventName'] ?? 'Événement';
+                            final type = data['eventType'] ?? '';
+                            final createdAt = data['createdAt'];
+                            return ListTile(
+                              title: Text(name),
+                              subtitle: Text('${type.toString()} • ${_formatTimestamp(createdAt)}'),
+                              onTap: () => _showEventDetailsDialog(d.id, context),
+                            );
+                          }).toList(),
+                      ]),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Upcoming events
+                  Text('Événements à venir', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: Column(children: [
+                        if (upcomingEvents.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('Aucun événement à venir.')),
+                        if (upcomingEvents.isNotEmpty)
+                          ...upcomingEvents.map((d) {
+                            final data = d.data() as Map<String, dynamic>? ?? {};
+                            final name = data['eventName'] ?? 'Événement';
+                            final date = data['eventDate'];
+                            return ListTile(
+                              title: Text(name),
+                              subtitle: Text('${_formatTimestamp(date)}'),
+                              onTap: () => _showEventDetailsDialog(d.id, context),
+                            );
+                          }).toList(),
+                      ]),
+                    ),
+                  ),
+
+                  const SizedBox(height: 16),
+
+                  // Recent transactions
+                  Text('Dernières transactions', style: Theme.of(context).textTheme.titleMedium),
+                  const SizedBox(height: 8),
+                  Card(
+                    child: SizedBox(
+                      width: double.infinity,
+                      child: Column(children: [
+                        if (transactions.isEmpty) const Padding(padding: EdgeInsets.all(16), child: Text('Aucune transaction récente.')),
+                        if (transactions.isNotEmpty)
+                          ...transactions.take(5).map((d) {
+                            final data = d.data() as Map<String, dynamic>? ?? {};
+                            final desc = data['description'] ?? data['paymentMethod'] ?? 'Transaction';
+                            final amt = _parseAmount(data['amount']);
+                            final when = _formatTimestamp(data['timestamp']);
+                            final status = data['status'] ?? '';
+                            return ListTile(
+                              title: Text(desc),
+                              subtitle: Text('$when • ${status.toString()}'),
+                              trailing: Text(_formatCurrency(amt)),
+                            );
+                          }).toList(),
+                      ]),
+                    ),
+                  ),
+
                 ],
               ),
             ),
@@ -746,7 +841,7 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
             child: Padding(
               padding: const EdgeInsets.all(16.0),
               child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text('Configuration globale', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Theme.of(context).colorScheme.onPrimary)),
+                Text('Configuration globale', style: Theme.of(context).textTheme.headlineSmall?.copyWith(color: Theme.of(context).colorScheme.primary)),
                 const SizedBox(height: 12),
                 ListTile(title: const Text('Theme'), subtitle: Text(themeName), trailing: TextButton(onPressed: _editConfig, child: const Text('Modifier'))),
               ]),
@@ -862,7 +957,8 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
                   itemCount: docs.length,
                   itemBuilder: (c, i) {
                     final d = docs[i];
-                    final data = d.data() as Map<String, dynamic>? ?? {};
+                    final raw = d.data();
+                    final data = (raw is Map<String, dynamic>) ? raw : <String, dynamic>{};
                     final name = data['name'] ?? data['eventName'] ?? 'Événement';
                     final createdBy = data['createdBy'] ?? data['userId'] ?? '—';
                     final date = data['date'] ?? data['createdAt'];
@@ -942,7 +1038,8 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
         return;
       }
 
-      final eventData = eventDoc.data() as Map<String, dynamic>? ?? {};
+  final raw = eventDoc.data();
+  final eventData = (raw is Map<String, dynamic>) ? raw : <String, dynamic>{};
       final event = Event.fromFirestore(eventDoc);
 
       final prestationsSnap = await eventDoc.reference.collection('selected_prestations').get();
@@ -1151,7 +1248,8 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
           StreamBuilder<DocumentSnapshot>(
             stream: FirebaseFirestore.instance.collection('admin_meta').doc('notifications').snapshots(),
             builder: (context, snap) {
-              final data = snap.data?.data() as Map<String, dynamic>? ?? {};
+              final raw2 = snap.data?.data();
+              final data = (raw2 is Map<String, dynamic>) ? raw2 : <String, dynamic>{};
               final unread = (data['unreadEvents'] as num?)?.toInt() ?? 0;
               return Stack(
                 alignment: Alignment.center,
