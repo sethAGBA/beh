@@ -1,8 +1,15 @@
+import 'package:beh/main_scaffold.dart';
+import 'package:beh/payment/payment_failure_page.dart';
+import 'package:beh/payment/payment_success_page.dart';
+import 'package:beh/payment/payment_verification_page.dart';
+import 'package:beh/payment/payment_confirmation_page.dart';
+import 'package:beh/payment/payment_methods_page.dart';
 import 'package:beh/order_summary_page.dart';
 import 'package:beh/prestation_selection_page.dart';
 import 'package:beh/event_creation_page.dart';
 import 'package:beh/event_details_page.dart';
 import 'package:beh/home_page.dart';
+import 'package:beh/service_catalog_page.dart';
 import 'package:beh/sign_in.dart';
 import 'package:beh/sign_up.dart';
 import 'package:beh/profile_page.dart';
@@ -30,23 +37,49 @@ class GoRouterRefreshStream extends ChangeNotifier {
   }
 }
 
+final _rootNavigatorKey = GlobalKey<NavigatorState>();
+final _shellNavigatorKey = GlobalKey<NavigatorState>();
+
 final GoRouter router = GoRouter(
+  navigatorKey: _rootNavigatorKey,
+  initialLocation: '/home',
   routes: [
+    // Main application shell
+    ShellRoute(
+      navigatorKey: _shellNavigatorKey,
+      builder: (context, state, child) {
+        return MainScaffold(child: child);
+      },
+      routes: [
+        GoRoute(
+          path: '/home',
+          builder: (context, state) => const HomePage(),
+        ),
+        GoRoute(
+          path: '/services',
+          builder: (context, state) => const ServiceCatalogPage(),
+        ),
+        // Placeholder for my-events, can be built out later
+        GoRoute(
+          path: '/my-events',
+          builder: (context, state) => const Scaffold(
+            body: Center(child: Text('Mes Événements (à venir)')),
+          ),
+        ),
+      ],
+    ),
+    // Standalone routes (no shell)
     GoRoute(
       path: '/',
       redirect: (context, state) {
         final user = FirebaseAuth.instance.currentUser;
         if (user == null) {
-          return '/signin'; // Should redirect here if user is null
+          return '/signin';
         } else {
+          // If logged in, default to the home page within the shell
           return '/home';
         }
       },
-      builder: (context, state) => const Scaffold(
-        body: Center(
-          child: CircularProgressIndicator(), // Show loading while redirecting
-        ),
-      ),
     ),
     GoRoute(
       path: '/signin',
@@ -63,10 +96,6 @@ final GoRouter router = GoRouter(
       builder: (context, state) => const SignUpScreen(),
     ),
     GoRoute(
-      path: '/home',
-      builder: (context, state) => const HomePage(),
-    ),
-    GoRoute(
       path: '/profile',
       builder: (context, state) => const ProfilePage(),
     ),
@@ -75,8 +104,11 @@ final GoRouter router = GoRouter(
       builder: (context, state) => const AdminPage(),
     ),
     GoRoute(
-      path: '/create-event',
-      builder: (context, state) => const EventCreationPage(),
+      path: '/create-event/:eventType',
+      builder: (context, state) {
+        final eventType = state.pathParameters['eventType'] ?? 'generic';
+        return EventCreationPage(eventType: eventType);
+      },
     ),
     GoRoute(
       path: '/event-details/:eventId',
@@ -107,9 +139,74 @@ final GoRouter router = GoRouter(
             }
             return OrderSummaryPage(eventId: eventId);
           },
+          routes: [
+            GoRoute(
+              path: 'payment',
+              builder: (context, state) {
+                final eventId = state.pathParameters['eventId'];
+                final totalAmount = state.extra as double?;
+                if (eventId == null || totalAmount == null) {
+                  return const Text('Error: Event ID or amount not found');
+                }
+                return PaymentMethodsPage(eventId: eventId, totalAmount: totalAmount);
+              },
+              routes: [
+                GoRoute(
+                  path: 'confirm',
+                  builder: (context, state) {
+                    final eventId = state.pathParameters['eventId'];
+                    final extra = state.extra as Map<String, dynamic>?;
+                    if (eventId == null || extra == null) {
+                      return const Text('Error: Event ID or extra data not found');
+                    }
+                    return PaymentConfirmationPage(
+                      eventId: eventId,
+                      method: extra['method'] as String,
+                      amount: extra['amount'] as double,
+                    );
+                  },
+                ),
+                GoRoute(
+                  path: 'verify',
+                  builder: (context, state) {
+                    final eventId = state.pathParameters['eventId'];
+                    final extra = state.extra as Map<String, dynamic>?;
+                    if (eventId == null || extra == null) {
+                      return const Text('Error: Event ID or extra data not found');
+                    }
+                    return PaymentVerificationPage(
+                      eventId: eventId,
+                      method: extra['method'] as String,
+                      amount: extra['amount'] as double,
+                    );
+                  },
+                ),
+                GoRoute(
+                  path: 'success',
+                  builder: (context, state) {
+                    final eventId = state.pathParameters['eventId'];
+                    if (eventId == null) {
+                      return const Text('Error: Event ID not found');
+                    }
+                    return PaymentSuccessPage(eventId: eventId);
+                  },
+                ),
+                GoRoute(
+                  path: 'failure',
+                  builder: (context, state) {
+                    final eventId = state.pathParameters['eventId'];
+                    if (eventId == null) {
+                      return const Text('Error: Event ID not found');
+                    }
+                    return PaymentFailurePage(eventId: eventId);
+                  },
+                ),
+              ],
+            ),
+          ],
         ),
-      ]
+      ],
     ),
   ],
-  refreshListenable: GoRouterRefreshStream(FirebaseAuth.instance.authStateChanges()), // Added this line
+  refreshListenable: GoRouterRefreshStream(FirebaseAuth.instance.authStateChanges()),
 );

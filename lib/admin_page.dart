@@ -53,36 +53,40 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
   Future<void> _checkAuthorization() async {
     final user = FirebaseAuth.instance.currentUser;
     if (user == null) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => Navigator.of(context).pushReplacementNamed('/signin'));
+      if (mounted) {
+        context.go('/signin');
+      }
       return;
     }
+
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final navigator = Navigator.of(context);
 
     try {
       final doc = await _usersRef.doc(user.uid).get();
       if (!mounted) return;
-  final role = doc.data()?['role'];
+      final role = doc.data()?['role'];
       setState(() {
         _isAuthorized = role == 'admin' || role == 'superadmin';
         _loading = false;
       });
       if (!_isAuthorized) {
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Accès administrateur requis')));
-          Navigator.of(context).pushReplacementNamed('/home');
-        });
+        scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Accès administrateur requis')));
+        navigator.pushReplacementNamed('/home');
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
     }
   }
 
   Future<void> _addAdminByEmail(String email) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
       final query = await _usersRef.where('email', isEqualTo: email).limit(1).get();
       if (query.docs.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Utilisateur introuvable')));
+        scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Utilisateur introuvable')));
         return;
       }
       final userDoc = query.docs.first;
@@ -104,9 +108,9 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
 
       await _logAction('add_admin', target: uid, details: {'email': email});
 
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Administrateur ajouté')));
+      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Administrateur ajouté')));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
     }
   }
 
@@ -125,15 +129,17 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
 
     if (confirmed != true) return;
 
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+
     try {
       // Set role to 'user' to demote cleanly
       await _usersRef.doc(uid).set({'role': 'user', 'updatedAt': FieldValue.serverTimestamp()}, SetOptions(merge: true));
       // Remove admin doc if exists
       await _adminsRef.doc(uid).delete().catchError((_) {});
       await _logAction('remove_admin', target: uid, details: {'email': email});
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Administrateur rétrogradé')));
+      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Administrateur rétrogradé')));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
     }
   }
 
@@ -164,16 +170,18 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
   }
 
   Future<void> _toggleBlockUser(String uid, bool block) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
       await _usersRef.doc(uid).update({'blocked': block});
       await _logAction(block ? 'block_user' : 'unblock_user', target: uid);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(block ? 'Utilisateur bloqué' : 'Utilisateur débloqué')));
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text(block ? 'Utilisateur bloqué' : 'Utilisateur débloqué')));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
     }
   }
 
   Future<void> _addService(String name, double price, String category, String description, String imageUrl) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
       final doc = await _servicesRef.add({
         'name': name,
@@ -185,19 +193,20 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
         'createdAt': FieldValue.serverTimestamp(),
       });
       await _logAction('add_service', target: doc.id, details: {'name': name, 'price': price, 'category': category});
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Prestation ajoutée')));
+      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Prestation ajoutée')));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
     }
   }
 
   Future<void> _updateService(String id, Map<String, dynamic> data) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
       await _servicesRef.doc(id).update(data);
       await _logAction('update_service', target: id, details: data);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Prestation mise à jour')));
+      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Prestation mise à jour')));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
     }
   }
 
@@ -471,46 +480,61 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
 
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Ajouter prestation'),
-        content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: nameCtl, decoration: const InputDecoration(labelText: 'Nom')),
-            TextField(controller: priceCtl, decoration: const InputDecoration(labelText: 'Prix'), keyboardType: TextInputType.number),
-            TextField(controller: descCtl, decoration: const InputDecoration(labelText: 'Description')),
-            TextField(controller: imgCtl, decoration: const InputDecoration(labelText: 'URL de l\'image')),
-            DropdownButtonFormField<String>(
-              value: selectedCategory,
-              items: categories.map((String category) {
-                return DropdownMenuItem<String>(
-                  value: category,
-                  child: Text(category),
-                );
-              }).toList(),
-              onChanged: (newValue) {
-                selectedCategory = newValue!;
-              },
-              decoration: const InputDecoration(labelText: 'Catégorie'),
-            ),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
-          TextButton(
-            onPressed: () {
-              final name = nameCtl.text.trim();
-              final price = double.tryParse(priceCtl.text.trim()) ?? 0.0;
-              final description = descCtl.text.trim();
-              final imageUrl = imgCtl.text.trim();
-              Navigator.of(context).pop();
-              if (name.isNotEmpty) {
-                _addService(name, price, selectedCategory, description, imageUrl);
-              }
-            },
-            child: const Text('Ajouter'),
-          ),
-        ],
-      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              insetPadding: EdgeInsets.symmetric(horizontal: 20.0),
+              title: const Text('Ajouter prestation'),
+              content: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(controller: nameCtl, decoration: const InputDecoration(labelText: 'Nom')),
+                  TextField(controller: priceCtl, decoration: const InputDecoration(labelText: 'Prix'), keyboardType: TextInputType.number),
+                  TextField(controller: descCtl, decoration: const InputDecoration(labelText: 'Description')),
+                  TextField(controller: imgCtl, decoration: const InputDecoration(labelText: 'URL de l\'image')),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: selectedCategory,
+                          items: categories.map((String category) {
+                            return DropdownMenuItem<String>(
+                              value: category,
+                              child: Text(category, overflow: TextOverflow.ellipsis),
+                            );
+                          }).toList(),
+                          onChanged: (newValue) {
+                            setState(() {
+                              selectedCategory = newValue!;
+                            });
+                          },
+                          decoration: const InputDecoration(labelText: 'Catégorie'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ]),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
+                TextButton(
+                  onPressed: () {
+                    final name = nameCtl.text.trim();
+                    final price = double.tryParse(priceCtl.text.trim()) ?? 0.0;
+                    final description = descCtl.text.trim();
+                    final imageUrl = imgCtl.text.trim();
+                    Navigator.of(context).pop();
+                    if (name.isNotEmpty) {
+                      _addService(name, price, selectedCategory, description, imageUrl);
+                    }
+                  },
+                  child: const Text('Ajouter'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -533,47 +557,62 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
 
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Modifier prestation'),
-        content: SingleChildScrollView(
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            TextField(controller: nameCtl, decoration: const InputDecoration(labelText: 'Nom')),
-            TextField(controller: priceCtl, decoration: const InputDecoration(labelText: 'Prix'), keyboardType: TextInputType.number),
-            TextField(controller: descCtl, decoration: const InputDecoration(labelText: 'Description')),
-            TextField(controller: imgCtl, decoration: const InputDecoration(labelText: 'URL de l\'image')),
-            DropdownButtonFormField<String>(
-              value: selectedCategory,
-              items: categories.map((String category) {
-                return DropdownMenuItem<String>(
-                  value: category,
-                  child: Text(category),
-                );
-              }).toList(),
-              onChanged: (newValue) {
-                selectedCategory = newValue!;
-              },
-              decoration: const InputDecoration(labelText: 'Catégorie'),
-            ),
-          ]),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
-          TextButton(onPressed: () {
-            final name = nameCtl.text.trim();
-            final price = double.tryParse(priceCtl.text.trim()) ?? 0.0;
-            final description = descCtl.text.trim();
-            final imageUrl = imgCtl.text.trim();
-            Navigator.of(context).pop();
-            _updateService(id, {
-              'name': name,
-              'price': price,
-              'category': selectedCategory,
-              'description': description,
-              'imageUrl': imageUrl,
-            });
-          }, child: const Text('Enregistrer')),
-        ],
-      ),
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              insetPadding: EdgeInsets.symmetric(horizontal: 20.0),
+              title: const Text('Modifier prestation'),
+              content: SingleChildScrollView(
+                child: Column(mainAxisSize: MainAxisSize.min, children: [
+                  TextField(controller: nameCtl, decoration: const InputDecoration(labelText: 'Nom')),
+                  TextField(controller: priceCtl, decoration: const InputDecoration(labelText: 'Prix'), keyboardType: TextInputType.number),
+                  TextField(controller: descCtl, decoration: const InputDecoration(labelText: 'Description')),
+                  TextField(controller: imgCtl, decoration: const InputDecoration(labelText: 'URL de l\'image')),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: DropdownButtonFormField<String>(
+                          value: selectedCategory,
+                          items: categories.map((String category) {
+                            return DropdownMenuItem<String>(
+                              value: category,
+                              child: Text(category, overflow: TextOverflow.ellipsis),
+                            );
+                          }).toList(),
+                          onChanged: (newValue) {
+                            setState(() {
+                              selectedCategory = newValue!;
+                            });
+                          },
+                          decoration: const InputDecoration(labelText: 'Catégorie'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ]),
+              ),
+              actions: [
+                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
+                TextButton(onPressed: () {
+                  final name = nameCtl.text.trim();
+                  final price = double.tryParse(priceCtl.text.trim()) ?? 0.0;
+                  final description = descCtl.text.trim();
+                  final imageUrl = imgCtl.text.trim();
+                  Navigator.of(context).pop();
+                  _updateService(id, {
+                    'name': name,
+                    'price': price,
+                    'category': selectedCategory,
+                    'description': description,
+                    'imageUrl': imageUrl,
+                  });
+                }, child: const Text('Enregistrer')),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 

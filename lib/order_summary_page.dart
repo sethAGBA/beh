@@ -44,28 +44,30 @@ class _OrderSummaryPageState extends State<OrderSummaryPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Récapitulatif Commande'),
-      ),
-      body: FutureBuilder<Map<String, dynamic>>(
-        future: _summaryFuture,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Erreur: ${snapshot.error}'));
-          }
-          if (!snapshot.hasData) {
-            return const Center(child: Text('Aucune donnée trouvée.'));
-          }
+    return FutureBuilder<Map<String, dynamic>>(
+      future: _summaryFuture,
+      builder: (context, snapshot) {
+        final appBar = AppBar(
+          title: const Text('Récapitulatif Commande'),
+        );
 
-          final event = snapshot.data!['event'] as Event;
-          final userData = snapshot.data!['user'] as Map<String, dynamic>?;
-          final prestations = snapshot.data!['prestations'] as List<dynamic>;
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(appBar: appBar, body: const Center(child: CircularProgressIndicator()));
+        }
+        if (snapshot.hasError) {
+          return Scaffold(appBar: appBar, body: Center(child: Text('Erreur: ${snapshot.error}')));
+        }
+        if (!snapshot.hasData) {
+          return Scaffold(appBar: appBar, body: const Center(child: Text('Aucune donnée trouvée.')));
+        }
 
-          return SingleChildScrollView(
+        final event = snapshot.data!['event'] as Event;
+        final userData = snapshot.data!['user'] as Map<String, dynamic>?;
+        final prestations = snapshot.data!['prestations'] as List<dynamic>;
+
+        return Scaffold(
+          appBar: appBar,
+          body: SingleChildScrollView(
             padding: const EdgeInsets.all(16.0),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -79,10 +81,10 @@ class _OrderSummaryPageState extends State<OrderSummaryPage> {
                 _buildFinancialsSection(context, prestations),
               ],
             ),
-          );
-        },
-      ),
-      bottomNavigationBar: _buildActionButtons(context),
+          ),
+          bottomNavigationBar: _buildActionButtons(context, prestations),
+        );
+      },
     );
   }
 
@@ -93,8 +95,9 @@ class _OrderSummaryPageState extends State<OrderSummaryPage> {
       children: [
         Text('Détails Événement', style: Theme.of(context).textTheme.headlineSmall),
         const SizedBox(height: 8),
-        ListTile(title: Text(event.userId ?? 'N/A'), subtitle: const Text('Organisateur (userId)')),
-        ListTile(title: Text(event.toString()), subtitle: const Text('Données de l\'événement')),
+        ListTile(title: Text(event.eventName), subtitle: const Text('Nom de l\'événement')),
+        ListTile(title: Text(event.eventDate.toLocal().toString().split(' ')[0]), subtitle: const Text('Date')),
+        ListTile(title: Text(event.location), subtitle: const Text('Lieu')),
       ],
     );
   }
@@ -186,7 +189,7 @@ class _OrderSummaryPageState extends State<OrderSummaryPage> {
     );
   }
 
-  Widget _buildActionButtons(BuildContext context) {
+  Widget _buildActionButtons(BuildContext context, List<dynamic> prestations) {
     return Padding(
       padding: const EdgeInsets.all(16.0),
       child: Column(
@@ -195,7 +198,13 @@ class _OrderSummaryPageState extends State<OrderSummaryPage> {
           SizedBox(
             width: double.infinity,
             child: ElevatedButton(
-              onPressed: () { /* TODO: Navigate to payment */ },
+              onPressed: () {
+                final total = _calculateTotal(prestations);
+                context.go(
+                  '/event-details/${widget.eventId}/summary/payment',
+                  extra: total,
+                );
+              },
               child: const Text('Payer maintenant'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
@@ -217,10 +226,27 @@ class _OrderSummaryPageState extends State<OrderSummaryPage> {
             },
             child: const Text('Modifier les prestations'),
           ),
-          TextButton(onPressed: () { /* TODO: Implement cancel order */ }, child: const Text('Annuler commande')),
-          TextButton(onPressed: () { /* TODO: Implement save for later */ }, child: const Text('Sauvegarder pour plus tard')),
+          TextButton(onPressed: () {
+            // TODO: Implement cancel order logic (e.g., clear selected prestations, navigate home)
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Commande annulée (logique à implémenter)')));
+            context.go('/home');
+          }, child: const Text('Annuler commande')),
+          TextButton(onPressed: () {
+            // TODO: Implement save for later logic (e.g., mark order as draft)
+            ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Commande sauvegardée pour plus tard (logique à implémenter)')));
+          }, child: const Text('Sauvegarder pour plus tard')),
         ],
       ),
     );
+  }
+
+  double _calculateTotal(List<dynamic> prestations) {
+    double subTotal = 0;
+    for (var p in prestations) {
+      subTotal += (p['totalPrice'] as num?)?.toDouble() ?? 0.0;
+    }
+    final double tax = subTotal * 0.18;
+    final double discount = 0.0;
+    return subTotal + tax - discount;
   }
 }
