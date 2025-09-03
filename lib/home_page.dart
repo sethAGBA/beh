@@ -26,22 +26,18 @@ class _HomePageState extends State<HomePage> {
       User? user = FirebaseAuth.instance.currentUser;
       if (user != null) {
         DocumentSnapshot userDoc = await FirebaseFirestore.instance.collection('users').doc(user.uid).get();
-        if (userDoc.exists && mounted) {
-          final data = userDoc.data() as Map<String, dynamic>? ?? {};
-          final role = data['role'] ?? '';
-          // If user is admin, redirect to admin screen
-          if (role == 'admin' || role == 'superadmin') {
-            if (mounted) {
-              // Use GoRouter to navigate and replace current
-              GoRouter.of(context).go('/admin');
-            }
-            return;
-          }
-
-          setState(() {
-            _userName = data['firstName'];
-          });
+        if (!mounted) return;
+        final data = userDoc.data() as Map<String, dynamic>? ?? {};
+        final role = data['role'] ?? '';
+        // If user is admin, redirect to admin screen
+        if (role == 'admin' || role == 'superadmin') {
+          context.go('/admin');
+          return;
         }
+
+        setState(() {
+          _userName = data['firstName'];
+        });
       }
     } catch (e) {
       if (mounted) {
@@ -67,7 +63,7 @@ class _HomePageState extends State<HomePage> {
           builder: (context, scrollController) {
             return Container(
               decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.background,
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
               ),
               child: Column(
@@ -131,20 +127,16 @@ class _HomePageState extends State<HomePage> {
     );
 
     if (confirmed == true) {
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
       try {
         await FirebaseFirestore.instance.collection('events').doc(event.id).delete();
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Événement supprimé avec succès.')),
-          );
-          
-        }
+        scaffoldMessenger.showSnackBar(
+          const SnackBar(content: Text('Événement supprimé avec succès.')),
+        );
       } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text('Erreur lors de la suppression: ${e.toString()}')),
-          );
-        }
+        scaffoldMessenger.showSnackBar(
+          SnackBar(content: Text('Erreur lors de la suppression: ${e.toString()}')),
+        );
       }
     }
   }
@@ -164,7 +156,7 @@ class _HomePageState extends State<HomePage> {
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
-      backgroundColor: colorScheme.background,
+      backgroundColor: colorScheme.surface,
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance
             .collection('events')
@@ -179,7 +171,7 @@ class _HomePageState extends State<HomePage> {
           }
 
           final events = snapshot.hasData ? snapshot.data!.docs.map((doc) => Event.fromFirestore(doc)).toList() : [];
-          final totalBudget = events.fold<double>(0.0, (sum, event) => sum + event.budget);
+          final totalBudget = events.fold<double>(0.0, (previousValue, event) => previousValue + event.budget);
 
           return RefreshIndicator(
             onRefresh: _handleRefresh,
@@ -295,7 +287,7 @@ class _HomePageState extends State<HomePage> {
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withAlpha(13),
             blurRadius: 10,
             offset: const Offset(0, 4),
           ),
@@ -306,7 +298,7 @@ class _HomePageState extends State<HomePage> {
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           CircleAvatar(
-            backgroundColor: colorScheme.primary.withOpacity(0.1),
+            backgroundColor: colorScheme.primary.withAlpha(26),
             child: Icon(icon, color: colorScheme.primary),
           ),
           const SizedBox(height: 8),
@@ -331,7 +323,7 @@ class _HomePageState extends State<HomePage> {
           borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withAlpha(13),
               blurRadius: 10,
               offset: const Offset(0, 4),
             ),

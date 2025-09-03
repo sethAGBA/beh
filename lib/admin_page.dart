@@ -59,25 +59,33 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
       return;
     }
 
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
-    final navigator = Navigator.of(context);
-
     try {
-      final doc = await _usersRef.doc(user.uid).get();
+      // Do Firestore reads with a timeout to avoid hanging the UI indefinitely.
+      final doc = await _usersRef.doc(user.uid).get().timeout(const Duration(seconds: 10));
       if (!mounted) return;
-      final role = doc.data()?['role'];
+
+      // Primary role source is users doc. If missing, fall back to admins collection.
+      var role = doc.data()?['role'];
+      if (role == null) {
+        final adminDoc = await _adminsRef.doc(user.uid).get().timeout(const Duration(seconds: 5));
+        if (adminDoc.exists) role = 'admin';
+      }
+
       setState(() {
         _isAuthorized = role == 'admin' || role == 'superadmin';
         _loading = false;
       });
+
       if (!_isAuthorized) {
-        scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Accès administrateur requis')));
-        navigator.pushReplacementNamed('/home');
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Accès administrateur requis')));
+        // Use GoRouter navigation to avoid mixing navigation systems which may cause loops.
+        context.go('/home');
       }
     } catch (e) {
       if (!mounted) return;
       setState(() => _loading = false);
-      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
     }
   }
 
@@ -211,12 +219,13 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
   }
 
   Future<void> _resolveTicket(String id) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
       await _ticketsRef.doc(id).update({'status': 'resolved', 'resolvedAt': FieldValue.serverTimestamp()});
       await _logAction('resolve_ticket', target: id);
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Ticket résolu')));
+      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Ticket résolu')));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
     }
   }
 
@@ -273,7 +282,7 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
   Widget _infoCard(String title, String value) => Container(
         width: 160,
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 6)]),
+        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), boxShadow: [BoxShadow(color: Colors.black.withAlpha(13), blurRadius: 6)]),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(title, style: const TextStyle(fontWeight: FontWeight.w600)), const SizedBox(height: 8), Text(value, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold))]),
       );
 
@@ -326,6 +335,7 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
   }
 
   Future<void> _promoteUser(String uid, String email) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
       final current = FirebaseAuth.instance.currentUser;
       await _usersRef.doc(uid).set({
@@ -341,10 +351,10 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
       });
       await _logAction('add_admin', target: uid, details: {'email': email});
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Administrateur ajouté')));
+      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Administrateur ajouté')));
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
+      scaffoldMessenger.showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
     }
   }
 
@@ -383,7 +393,7 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Historique activité'),
-        content: SizedBox(width: double.maxFinite, height: 300, child: ListView.builder(itemCount: items.length, itemBuilder: (c, i) => ListTile(title: Text(items[i]['action'] ?? '—'), subtitle: Text(items[i]['timestamp']?.toString() ?? '—')))),
+        content: SizedBox(width: double.maxFinite, height: 300, child: ListView.builder(itemCount: items.length, itemBuilder: (c, i) => ListTile(title: Text(items[i]['action'] ?? '—'), subtitle: Text(_formatTimestamp(items[i]['timestamp']))))),
         actions: [TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Fermer'))],
       ),
     );
@@ -405,13 +415,13 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
     );
 
     if (confirm == true) {
+      final scaffoldMessenger = ScaffoldMessenger.of(context);
+      final goRouter = GoRouter.of(context);
       try {
         await FirebaseAuth.instance.signOut();
-        if (!mounted) return;
-        context.go('/signin');
+        goRouter.go('/signin');
       } catch (e) {
-        if (!mounted) return;
-        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Erreur de déconnexion: $e')));
+        scaffoldMessenger.showSnackBar(SnackBar(content: Text('Erreur de déconnexion: $e')));
       }
     }
   }
@@ -678,9 +688,10 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
 
   void _editConfig() async {
     final doc = await _configRef.doc('app').get();
-  final raw = doc.data();
-  final data = (raw is Map<String, dynamic>) ? raw : <String, dynamic>{};
-  final themeCtl = TextEditingController(text: data['themeName'] ?? 'Default');
+    if (!mounted) return;
+    final raw = doc.data();
+    final data = (raw is Map<String, dynamic>) ? raw : <String, dynamic>{};
+    final themeCtl = TextEditingController(text: data['themeName'] ?? 'Default');
     showDialog<void>(
       context: context,
       builder: (context) => AlertDialog(
@@ -692,6 +703,7 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
             final val = themeCtl.text.trim();
             await _configRef.doc('app').set({'themeName': val});
             await _logAction('update_config', details: {'themeName': val});
+            if (!mounted) return;
             Navigator.of(context).pop();
             ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Configuration mise à jour')));
           }, child: const Text('Enregistrer')),
@@ -741,7 +753,7 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
           controller: _tabController,
           isScrollable: true,
           labelColor: Theme.of(context).colorScheme.onPrimary,
-          unselectedLabelColor: Theme.of(context).colorScheme.onPrimary.withOpacity(0.85),
+          unselectedLabelColor: Theme.of(context).colorScheme.onPrimary.withAlpha(217),
           indicatorColor: Theme.of(context).colorScheme.onPrimary,
           tabs: const [
             Tab(text: 'Dashboard'),
