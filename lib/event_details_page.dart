@@ -164,9 +164,9 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildBudgetColumn('Utilisé', spentBudget, Colors.orange),
-                _buildBudgetColumn('Restant', remainingBudget, Colors.green),
-                _buildBudgetColumn('Total', budget, theme.colorScheme.primary),
+                Expanded(child: _buildBudgetColumn('Utilisé', spentBudget, Colors.orange)),
+                Expanded(child: _buildBudgetColumn('Restant', remainingBudget, Colors.green)),
+                Expanded(child: _buildBudgetColumn('Total', budget, theme.colorScheme.primary)),
               ],
             ),
           ],

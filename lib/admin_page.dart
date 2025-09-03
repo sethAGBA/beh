@@ -27,7 +27,7 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 6, vsync: this);
+    _tabController = TabController(length: 7, vsync: this);
     _checkAuthorization();
   }
 
@@ -740,6 +740,19 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
     );
   }
 
+  Widget _buildMyServicesTab() {
+    return const Center(
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Icon(Icons.construction, size: 48, color: Colors.grey),
+          SizedBox(height: 16),
+          Text('Contenu de "Mes Services" en cours de développement.', style: TextStyle(color: Colors.grey)),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_loading) {
@@ -763,6 +776,7 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
             Tab(text: 'Dashboard'),
             Tab(text: 'Utilisateurs'),
             Tab(text: 'Prestations'),
+            Tab(text: 'Mes Services'), // New tab
             Tab(text: 'Finances'),
             Tab(text: 'Configuration'),
             Tab(text: 'Support'),
@@ -778,6 +792,7 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
         _buildDashboard(),
         _buildUsersTab(),
         _buildServicesTab(),
+        _buildMyServicesTab(), // New tab content
         _buildFinancialsTab(),
         _buildConfigTab(),
         _buildSupportTab(),
