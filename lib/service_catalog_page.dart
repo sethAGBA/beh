@@ -68,7 +68,7 @@ class ServiceCatalogPage extends StatelessWidget {
                 // Placeholder for an image
                 Container(
                   height: 150,
-                  color: colorScheme.secondary.withOpacity(0.2),
+                  color: colorScheme.secondary.withAlpha(51),
                   child: Center(
                     child: Icon(
                       service['icon'] as IconData,

@@ -4,13 +4,36 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 
 class FuneralForm extends StatefulWidget {
-  const FuneralForm({super.key});
+  final DocumentSnapshot? eventDoc;
+  const FuneralForm({super.key, this.eventDoc});
 
   @override
   State<FuneralForm> createState() => _FuneralFormState();
 }
 
 class _FuneralFormState extends State<FuneralForm> {
+  bool get _isEditing => widget.eventDoc != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final doc = widget.eventDoc;
+    if (doc != null) {
+      final data = doc.data() as Map<String, dynamic>? ?? {};
+      _deceasedNameController.text = (data['deceasedName'] ?? '') as String;
+      _locationController.text = (data['location'] ?? '') as String;
+      _contactNameController.text = (data['contactName'] ?? '') as String;
+      _contactPhoneController.text = (data['contactPhone'] ?? '') as String;
+      _budgetController.text = data['budget']?.toString() ?? '';
+      _notesController.text = (data['notes'] ?? '') as String;
+      final ts = data['eventDate'];
+      if (ts is Timestamp) {
+        final dt = ts.toDate();
+        _selectedDate = DateTime(dt.year, dt.month, dt.day);
+        _selectedTime = TimeOfDay(hour: dt.hour, minute: dt.minute);
+      }
+    }
+  }
   final _formKey = GlobalKey<FormState>();
   final _deceasedNameController = TextEditingController();
   final _locationController = TextEditingController();
@@ -81,7 +104,7 @@ class _FuneralFormState extends State<FuneralForm> {
 
         final eventName = 'Funérailles de ${_deceasedNameController.text.trim()}';
 
-        final eventRef = await FirebaseFirestore.instance.collection('events').add({
+        final data = {
           'userId': user.uid,
           'eventType': 'funerailles',
           'eventName': eventName,
@@ -92,32 +115,44 @@ class _FuneralFormState extends State<FuneralForm> {
           'contactPhone': _contactPhoneController.text.trim(),
           'budget': double.tryParse(_budgetController.text.trim()) ?? 0.0,
           'notes': _notesController.text.trim(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+        };
 
-        // Create a default checklist for funerals
-        final checklistBatch = FirebaseFirestore.instance.batch();
-        final checklistRef = eventRef.collection('checklist');
-        final defaultTasks = [
-          'Contacter les pompes funèbres',
-          'Prévenir la famille et les proches',
-          'Rédiger l\'avis de décès',
-          'Organiser la cérémonie',
-          'Choisir les fleurs',
-        ];
-        for (var task in defaultTasks) {
-          checklistBatch.set(checklistRef.doc(), {
-            'title': task,
-            'isCompleted': false,
-          });
-        }
-        await checklistBatch.commit();
+        if (_isEditing) {
+          await FirebaseFirestore.instance.collection('events').doc(widget.eventDoc!.id).update(data);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Cérémonie funéraire mise à jour avec succès.')),
+            );
+            context.go('/home');
+          }
+        } else {
+          data['createdAt'] = FieldValue.serverTimestamp();
+          final eventRef = await FirebaseFirestore.instance.collection('events').add(data);
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Cérémonie funéraire créée avec succès.')),
-          );
-          context.go('/home');
+          // Create a default checklist for funerals
+          final checklistBatch = FirebaseFirestore.instance.batch();
+          final checklistRef = eventRef.collection('checklist');
+          final defaultTasks = [
+            'Contacter les pompes funèbres',
+            'Prévenir la famille et les proches',
+            'Rédiger l\'avis de décès',
+            'Organiser la cérémonie',
+            'Choisir les fleurs',
+          ];
+          for (var task in defaultTasks) {
+            checklistBatch.set(checklistRef.doc(), {
+              'title': task,
+              'isCompleted': false,
+            });
+          }
+          await checklistBatch.commit();
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Cérémonie funéraire créée avec succès.')),
+            );
+            context.go('/home');
+          }
         }
       } catch (e) {
         if (mounted) {

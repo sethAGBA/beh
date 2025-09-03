@@ -158,8 +158,8 @@ class _SignInScreenState extends State<SignInScreen>
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
             colors: [
-              colorScheme.primary.withOpacity(0.1),
-              colorScheme.secondary.withOpacity(0.05),
+              colorScheme.primary.withAlpha(26),
+              colorScheme.secondary.withAlpha(13),
               Colors.white,
             ],
             stops: const [0.0, 0.3, 1.0],
@@ -189,7 +189,7 @@ class _SignInScreenState extends State<SignInScreen>
                               shape: BoxShape.circle,
                               boxShadow: [
                                 BoxShadow(
-                                  color: colorScheme.primary.withOpacity(0.2),
+                                  color: colorScheme.primary.withAlpha(51),
                                   blurRadius: 20,
                                   offset: const Offset(0, 8),
                                 ),

@@ -117,6 +117,7 @@ class _EventCreationFormState extends State<EventCreationForm> {
       location: _locationController.text.trim(),
       budget: double.tryParse(_budgetController.text.trim()) ?? 0.0,
       description: _descriptionController.text.trim().isEmpty ? null : _descriptionController.text.trim(),
+      eventType: widget.event?.eventType ?? 'general',
     );
 
     await FirebaseFirestore.instance.collection('events').add(newEvent.toFirestore());

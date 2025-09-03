@@ -4,7 +4,9 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 
 class ConferenceForm extends StatefulWidget {
-  const ConferenceForm({super.key});
+  final DocumentSnapshot? eventDoc;
+
+  ConferenceForm({Key? key, this.eventDoc}) : super(key: key);
 
   @override
   State<ConferenceForm> createState() => _ConferenceFormState();
@@ -23,6 +25,30 @@ class _ConferenceFormState extends State<ConferenceForm> {
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   bool _isLoading = false;
+
+  bool get _isEditing => widget.eventDoc != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final doc = widget.eventDoc;
+    if (doc != null) {
+      final data = doc.data() as Map<String, dynamic>? ?? {};
+      _titleController.text = (data['eventName'] ?? '') as String;
+      _companyNameController.text = (data['companyName'] ?? '') as String;
+      _attendeeCountController.text = data['attendeeCount']?.toString() ?? '';
+      _budgetController.text = data['budget']?.toString() ?? '';
+      _locationController.text = (data['location'] ?? '') as String;
+      _topicController.text = (data['topic'] ?? '') as String;
+      _notesController.text = (data['notes'] ?? '') as String;
+      final ts = data['eventDate'];
+      if (ts is Timestamp) {
+        final dt = ts.toDate();
+        _selectedDate = DateTime(dt.year, dt.month, dt.day);
+        _selectedTime = TimeOfDay(hour: dt.hour, minute: dt.minute);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -69,57 +95,10 @@ class _ConferenceFormState extends State<ConferenceForm> {
       });
 
       try {
-        User? user = FirebaseAuth.instance.currentUser;
-        if (user == null) throw Exception('Utilisateur non connecté');
-        if (_selectedDate == null || _selectedTime == null) throw Exception('Date ou heure manquante');
-
-        final eventDateTime = DateTime(
-          _selectedDate!.year,
-          _selectedDate!.month,
-          _selectedDate!.day,
-          _selectedTime!.hour,
-          _selectedTime!.minute,
-        );
-
-        final eventName = _titleController.text.trim();
-
-        final eventRef = await FirebaseFirestore.instance.collection('events').add({
-          'userId': user.uid,
-          'eventType': 'conference',
-          'eventName': eventName,
-          'companyName': _companyNameController.text.trim(),
-          'attendeeCount': int.tryParse(_attendeeCountController.text.trim()) ?? 0,
-          'eventDate': Timestamp.fromDate(eventDateTime),
-          'budget': double.tryParse(_budgetController.text.trim()) ?? 0.0,
-          'location': _locationController.text.trim(),
-          'topic': _topicController.text.trim(),
-          'notes': _notesController.text.trim(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
-
-        // Create a default checklist for conferences
-        final checklistBatch = FirebaseFirestore.instance.batch();
-        final checklistRef = eventRef.collection('checklist');
-        final defaultTasks = [
-          'Finaliser la liste des intervenants',
-          'Réserver le matériel audiovisuel',
-          'Préparer les badges et documents',
-          'Confirmer le traiteur pour les pauses café',
-          'Envoyer le programme aux participants',
-        ];
-        for (var task in defaultTasks) {
-          checklistBatch.set(checklistRef.doc(), {
-            'title': task,
-            'isCompleted': false,
-          });
-        }
-        await checklistBatch.commit();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Conférence créée avec succès !')),
-          );
-          context.go('/home');
+        if (_isEditing) {
+          await _updateEvent();
+        } else {
+          await _createEvent();
         }
       } catch (e) {
         if (mounted) {
@@ -134,6 +113,93 @@ class _ConferenceFormState extends State<ConferenceForm> {
           });
         }
       }
+    }
+  }
+
+  Future<void> _createEvent() async {
+    User? user = FirebaseAuth.instance.currentUser;
+    if (user == null) throw Exception('Utilisateur non connecté');
+    if (_selectedDate == null || _selectedTime == null) throw Exception('Date ou heure manquante');
+
+    final eventDateTime = DateTime(
+      _selectedDate!.year,
+      _selectedDate!.month,
+      _selectedDate!.day,
+      _selectedTime!.hour,
+      _selectedTime!.minute,
+    );
+
+    final eventName = _titleController.text.trim();
+
+    final eventRef = await FirebaseFirestore.instance.collection('events').add({
+      'userId': user.uid,
+      'eventType': 'conference',
+      'eventName': eventName,
+      'companyName': _companyNameController.text.trim(),
+      'attendeeCount': int.tryParse(_attendeeCountController.text.trim()) ?? 0,
+      'eventDate': Timestamp.fromDate(eventDateTime),
+      'budget': double.tryParse(_budgetController.text.trim()) ?? 0.0,
+      'location': _locationController.text.trim(),
+      'topic': _topicController.text.trim(),
+      'notes': _notesController.text.trim(),
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    // Create a default checklist for conferences
+    final checklistBatch = FirebaseFirestore.instance.batch();
+    final checklistRef = eventRef.collection('checklist');
+    final defaultTasks = [
+      'Finaliser la liste des intervenants',
+      'Réserver le matériel audiovisuel',
+      'Préparer les badges et documents',
+      'Confirmer le traiteur pour les pauses café',
+      'Envoyer le programme aux participants',
+    ];
+    for (var task in defaultTasks) {
+      checklistBatch.set(checklistRef.doc(), {
+        'title': task,
+        'isCompleted': false,
+      });
+    }
+    await checklistBatch.commit();
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Conférence créée avec succès !')),
+      );
+      context.go('/home');
+    }
+  }
+
+  Future<void> _updateEvent() async {
+    if (_selectedDate == null || _selectedTime == null) throw Exception('Date ou heure manquante');
+
+    final eventDateTime = DateTime(
+      _selectedDate!.year,
+      _selectedDate!.month,
+      _selectedDate!.day,
+      _selectedTime!.hour,
+      _selectedTime!.minute,
+    );
+
+    final eventName = _titleController.text.trim();
+
+    await FirebaseFirestore.instance.collection('events').doc(widget.eventDoc!.id).update({
+      'eventName': eventName,
+      'companyName': _companyNameController.text.trim(),
+      'attendeeCount': int.tryParse(_attendeeCountController.text.trim()) ?? 0,
+      'eventDate': Timestamp.fromDate(eventDateTime),
+      'budget': double.tryParse(_budgetController.text.trim()) ?? 0.0,
+      'location': _locationController.text.trim(),
+      'topic': _topicController.text.trim(),
+      'notes': _notesController.text.trim(),
+    });
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Conférence mise à jour avec succès !')),
+      );
+      context.go('/home');
     }
   }
 

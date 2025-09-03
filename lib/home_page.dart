@@ -3,7 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import 'package:beh/models/event.dart';
-import 'package:beh/event_creation_form.dart'; // Import the new form
+
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -48,61 +48,7 @@ class _HomePageState extends State<HomePage> {
     }
   }
 
-  // MODIFIED: Now accepts an optional Event for editing
-  void _showCreateEventModal(BuildContext context, {Event? event}) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return DraggableScrollableSheet(
-          initialChildSize: 0.8,
-          maxChildSize: 0.9,
-          minChildSize: 0.5,
-          expand: false,
-          builder: (context, scrollController) {
-            return Container(
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
-              ),
-              child: Column(
-                children: [
-                  // Modal Header
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          // MODIFIED: Title changes for editing
-                          event == null ? 'Nouvel Événement' : 'Modifier l\'événement',
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                      ],
-                    ),
-                  ),
-                  // Form
-                  Expanded(
-                    child: SingleChildScrollView(
-                      controller: scrollController,
-                      padding: const EdgeInsets.all(16.0),
-                      // MODIFIED: Pass the event to the form
-                      child: EventCreationForm(event: event),
-                    ),
-                  ),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
+  
 
   // NEW: Function to handle event deletion
   Future<void> _deleteEvent(BuildContext context, Event event) async {
@@ -170,7 +116,8 @@ class _HomePageState extends State<HomePage> {
             return Center(child: Text('Erreur: ${snapshot.error}'));
           }
 
-          final events = snapshot.hasData ? snapshot.data!.docs.map((doc) => Event.fromFirestore(doc)).toList() : [];
+          final eventDocs = snapshot.hasData ? snapshot.data!.docs : [];
+          final events = eventDocs.map((doc) => Event.fromFirestore(doc)).toList();
           final totalBudget = events.fold<double>(0.0, (previousValue, event) => previousValue + event.budget);
 
           return RefreshIndicator(
@@ -256,9 +203,9 @@ class _HomePageState extends State<HomePage> {
                 SliverList(
                   delegate: SliverChildBuilderDelegate(
                     (context, index) {
-                      return _buildEventCard(context, events[index]);
+                      return _buildEventCard(context, eventDocs[index]);
                     },
-                    childCount: events.length,
+                    childCount: eventDocs.length,
                   ),
                 ),
             ],
@@ -266,14 +213,7 @@ class _HomePageState extends State<HomePage> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        // MODIFIED: Pass null for event to indicate creation
-        onPressed: () => _showCreateEventModal(context),
-        label: const Text('Nouvel Événement'),
-        icon: const Icon(Icons.add),
-        backgroundColor: colorScheme.secondary,
-        foregroundColor: colorScheme.primary,
-      ),
+      
     );
   }
 
@@ -309,12 +249,12 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  // MODIFIED: Added PopupMenuButton for edit/delete actions
-  Widget _buildEventCard(BuildContext context, Event event) {
+  Widget _buildEventCard(BuildContext context, DocumentSnapshot eventDoc) {
+    final event = Event.fromFirestore(eventDoc);
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
     return GestureDetector(
-      onTap: () => context.go('/event-details/${event.id}'),
+      onTap: () => context.go('/my-events/details/${event.id}'),
       child: Container(
         margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
         padding: const EdgeInsets.all(16.0),
@@ -345,7 +285,13 @@ class _HomePageState extends State<HomePage> {
                 PopupMenuButton<String>(
                   onSelected: (value) {
                     if (value == 'edit') {
-                      _showCreateEventModal(context, event: event);
+                      if (event.eventType.isNotEmpty) {
+                        context.go('/create-event/${event.eventType}', extra: eventDoc);
+                      } else {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Le type de cet événement n\'est pas défini.')),
+                        );
+                      }
                     } else if (value == 'delete') {
                       _deleteEvent(context, event);
                     }

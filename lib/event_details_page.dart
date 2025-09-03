@@ -195,10 +195,10 @@ class _EventDetailsPageState extends State<EventDetailsPage> {
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _buildActionItem(context, Icons.design_services_outlined, 'Prestations', () {
-              context.go('/event-details/${event.id}/prestations');
+              context.go('/my-events/details/${event.id}/prestations');
             }),
             _buildActionItem(context, Icons.receipt_long_outlined, 'Récapitulatif', () {
-              context.go('/event-details/${event.id}/summary');
+              context.go('/my-events/details/${event.id}/summary');
             }),
             _buildActionItem(context, Icons.support_agent_outlined, 'Support', () {
               // TODO: Implement support action

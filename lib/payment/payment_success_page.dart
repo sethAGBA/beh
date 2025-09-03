@@ -53,21 +53,17 @@ class PaymentSuccessPage extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
-                    context.go('/home'); // Navigate back to home
-                  },
-                  child: const Text('Retour Accueil'),
+                  onPressed: () => context.go('/home'), // Navigate back to home
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
+                  child: const Text('Retour Accueil'),
                 ),
               ),
               const SizedBox(height: 10),
               TextButton(
-                onPressed: () {
-                  context.go('/event-details/${eventId}'); // Navigate to event details
-                },
+                onPressed: () => context.go('/my-events/details/$eventId'), // Navigate to event details
                 child: const Text('Voir Détails'),
               ),
             ],

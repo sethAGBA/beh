@@ -58,13 +58,7 @@ class MainScaffold extends StatelessWidget {
         context.go('/services');
         break;
       case 2:
-        // Placeholder for the 'My Events' screen
-        // You can create this page and add it to the router.
-        // For now, it can navigate to home or show a snackbar.
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Page \'Mes Événements\' à venir !')),
-        );
-        // context.go('/my-events');
+        context.go('/my-events');
         break;
     }
   }

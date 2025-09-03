@@ -1,16 +1,40 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:beh/models/event.dart';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 
 class WeddingForm extends StatefulWidget {
-  const WeddingForm({super.key});
+  final DocumentSnapshot? eventDoc;
+  const WeddingForm({super.key, this.eventDoc});
 
   @override
   State<WeddingForm> createState() => _WeddingFormState();
 }
 
 class _WeddingFormState extends State<WeddingForm> {
+  bool get _isEditing => widget.eventDoc != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final doc = widget.eventDoc;
+    if (doc != null) {
+      final data = doc.data() as Map<String, dynamic>? ?? {};
+      _brideNameController.text = (data['brideName'] ?? '') as String;
+      _groomNameController.text = (data['groomName'] ?? '') as String;
+      _guestCountController.text = data['guestCount']?.toString() ?? '';
+      _budgetController.text = data['budget']?.toString() ?? '';
+      _locationController.text = (data['location'] ?? '') as String;
+      _notesController.text = (data['notes'] ?? '') as String;
+      final ts = data['eventDate'];
+      if (ts is Timestamp) {
+        final dt = ts.toDate();
+        _selectedDate = DateTime(dt.year, dt.month, dt.day);
+        _selectedTime = TimeOfDay(hour: dt.hour, minute: dt.minute);
+      }
+    }
+  }
   final _formKey = GlobalKey<FormState>();
   final _brideNameController = TextEditingController();
   final _groomNameController = TextEditingController();
@@ -86,7 +110,7 @@ class _WeddingFormState extends State<WeddingForm> {
         // Create a more descriptive event name
         final eventName = 'Mariage de ${_brideNameController.text.trim()} et ${_groomNameController.text.trim()}';
 
-        final eventRef = await FirebaseFirestore.instance.collection('events').add({
+        final data = {
           'userId': user.uid,
           'eventType': 'mariage',
           'eventName': eventName,
@@ -97,33 +121,45 @@ class _WeddingFormState extends State<WeddingForm> {
           'budget': double.tryParse(_budgetController.text.trim()) ?? 0.0,
           'location': _locationController.text.trim(),
           'notes': _notesController.text.trim(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+        };
 
-        // Create a default checklist
-        final checklistBatch = FirebaseFirestore.instance.batch();
-        final checklistRef = eventRef.collection('checklist');
-        final defaultTasks = [
-          'Choisir le lieu de réception',
-          'Envoyer les faire-part',
-          'Réserver le traiteur',
-          'Choisir la décoration',
-          'Réserver le photographe',
-          'Acheter les alliances',
-        ];
-        for (var task in defaultTasks) {
-          checklistBatch.set(checklistRef.doc(), {
-            'title': task,
-            'isCompleted': false,
-          });
-        }
-        await checklistBatch.commit();
+        if (_isEditing) {
+          await FirebaseFirestore.instance.collection('events').doc(widget.eventDoc!.id).update(data);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Événement de mariage mis à jour avec succès !')),
+            );
+            context.go('/home');
+          }
+        } else {
+          data['createdAt'] = FieldValue.serverTimestamp();
+          final eventRef = await FirebaseFirestore.instance.collection('events').add(data);
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Événement de mariage créé avec succès !')),
-          );
-          context.go('/home');
+          // Create a default checklist
+          final checklistBatch = FirebaseFirestore.instance.batch();
+          final checklistRef = eventRef.collection('checklist');
+          final defaultTasks = [
+            'Choisir le lieu de réception',
+            'Envoyer les faire-part',
+            'Réserver le traiteur',
+            'Choisir la décoration',
+            'Réserver le photographe',
+            'Acheter les alliances',
+          ];
+          for (var task in defaultTasks) {
+            checklistBatch.set(checklistRef.doc(), {
+              'title': task,
+              'isCompleted': false,
+            });
+          }
+          await checklistBatch.commit();
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Événement de mariage créé avec succès !')),
+            );
+            context.go('/home');
+          }
         }
       } catch (e) {
         if (mounted) {

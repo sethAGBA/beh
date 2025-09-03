@@ -33,7 +33,7 @@ class PaymentConfirmationPage extends StatelessWidget {
                 onPressed: () {
                   // Simulate payment processing
                   context.go(
-                    '/event-details/${eventId}/summary/payment/verify',
+                    '/my-events/details/$eventId/summary/payment/verify',
                     extra: {
                       'eventId': eventId,
                       'method': method,
@@ -41,11 +41,11 @@ class PaymentConfirmationPage extends StatelessWidget {
                     },
                   );
                 },
-                child: const Text('Confirmer le paiement'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
+                child: const Text('Confirmer le paiement'),
               ),
             ),
           ],

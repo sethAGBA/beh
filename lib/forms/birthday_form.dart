@@ -4,13 +4,16 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 
 class BirthdayForm extends StatefulWidget {
-  const BirthdayForm({super.key});
+  final DocumentSnapshot? eventDoc;
+  const BirthdayForm({super.key, this.eventDoc});
 
   @override
   State<BirthdayForm> createState() => _BirthdayFormState();
 }
 
 class _BirthdayFormState extends State<BirthdayForm> {
+  bool get _isEditing => widget.eventDoc != null;
+
   final _formKey = GlobalKey<FormState>();
   final _personNameController = TextEditingController();
   final _ageController = TextEditingController();
@@ -23,6 +26,28 @@ class _BirthdayFormState extends State<BirthdayForm> {
   DateTime? _selectedDate;
   TimeOfDay? _selectedTime;
   bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final doc = widget.eventDoc;
+    if (doc != null) {
+      final data = doc.data() as Map<String, dynamic>? ?? {};
+      _personNameController.text = (data['personName'] ?? '') as String;
+      _ageController.text = data['ageTurning']?.toString() ?? '';
+      _guestCountController.text = data['guestCount']?.toString() ?? '';
+      _budgetController.text = data['budget']?.toString() ?? '';
+      _locationController.text = (data['location'] ?? '') as String;
+      _themeController.text = (data['theme'] ?? '') as String;
+      _notesController.text = (data['notes'] ?? '') as String;
+      final ts = data['eventDate'];
+      if (ts is Timestamp) {
+        final dt = ts.toDate();
+        _selectedDate = DateTime(dt.year, dt.month, dt.day);
+        _selectedTime = TimeOfDay(hour: dt.hour, minute: dt.minute);
+      }
+    }
+  }
 
   @override
   void dispose() {
@@ -83,7 +108,7 @@ class _BirthdayFormState extends State<BirthdayForm> {
 
         final eventName = 'Anniversaire de ${_personNameController.text.trim()}';
 
-        final eventRef = await FirebaseFirestore.instance.collection('events').add({
+        final data = {
           'userId': user.uid,
           'eventType': 'anniversaire',
           'eventName': eventName,
@@ -95,33 +120,44 @@ class _BirthdayFormState extends State<BirthdayForm> {
           'location': _locationController.text.trim(),
           'theme': _themeController.text.trim(),
           'notes': _notesController.text.trim(),
-          'createdAt': FieldValue.serverTimestamp(),
-        });
+        };
 
-        // Create a default checklist
-        final checklistBatch = FirebaseFirestore.instance.batch();
-        final checklistRef = eventRef.collection('checklist');
-        final defaultTasks = [
-          'Définir la liste d\'invités',
-          'Choisir le lieu',
-          'Envoyer les invitations',
-          'Commander le gâteau',
-          'Préparer la playlist musicale',
-          'Acheter les décorations',
-        ];
-        for (var task in defaultTasks) {
-          checklistBatch.set(checklistRef.doc(), {
-            'title': task,
-            'isCompleted': false,
-          });
-        }
-        await checklistBatch.commit();
+        if (_isEditing) {
+          await FirebaseFirestore.instance.collection('events').doc(widget.eventDoc!.id).update(data);
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Événement d\'anniversaire mis à jour avec succès !')),
+            );
+            context.go('/home');
+          }
+        } else {
+          data['createdAt'] = FieldValue.serverTimestamp();
+          final eventRef = await FirebaseFirestore.instance.collection('events').add(data);
 
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Événement d\'anniversaire créé avec succès !')),
-          );
-          context.go('/home');
+          final checklistBatch = FirebaseFirestore.instance.batch();
+          final checklistRef = eventRef.collection('checklist');
+          final defaultTasks = [
+            'Définir la liste d\'invités',
+            'Choisir le lieu',
+            'Envoyer les invitations',
+            'Commander le gâteau',
+            'Préparer la playlist musicale',
+            'Acheter les décorations',
+          ];
+          for (var task in defaultTasks) {
+            checklistBatch.set(checklistRef.doc(), {
+              'title': task,
+              'isCompleted': false,
+            });
+          }
+          await checklistBatch.commit();
+
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Événement d\'anniversaire créé avec succès !')),
+            );
+            context.go('/home');
+          }
         }
       } catch (e) {
         if (mounted) {

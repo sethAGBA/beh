@@ -57,7 +57,7 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
                     ? () {
                         // Navigate to confirmation page
                         context.go(
-                          '/event-details/${widget.eventId}/summary/payment/confirm',
+                          '/my-events/details/${widget.eventId}/summary/payment/confirm',
                           extra: {
                             'method': _selectedMethod,
                             'amount': widget.totalAmount,
@@ -65,11 +65,11 @@ class _PaymentMethodsPageState extends State<PaymentMethodsPage> {
                         );
                       }
                     : null,
-                child: const Text('Confirmer le Paiement'),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(vertical: 16),
                   textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
+                child: const Text('Confirmer le Paiement'),
               ),
             ),
           ],

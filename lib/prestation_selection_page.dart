@@ -173,8 +173,8 @@ class _PrestationSelectionPageState extends State<PrestationSelectionPage> with 
       itemCount: categories.length,
       itemBuilder: (context, index) {
         final category = categories[index];
-        return ExpansionTile(
-          title: Text(category[0].toUpperCase() + category.substring(1) + 's'),
+          return ExpansionTile(
+          title: Text('${category[0].toUpperCase()}${category.substring(1)}s'),
           children: [_buildFoodList(cuisineType, category)],
         );
       },

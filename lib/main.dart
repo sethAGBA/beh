@@ -5,6 +5,7 @@ import 'firebase_options.dart';
 import 'package:beh/router.dart';
 import 'package:beh/user_provider.dart';
 import 'package:beh/theme.dart';
+import 'package:intl/date_symbol_data_local.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,6 +24,10 @@ void main() async {
   } catch (e) {
     rethrow; // Re-throw any other exceptions
   }
+
+  // Initialize Intl locale data used by DateFormat (e.g. 'fr_FR').
+  // This avoids LocaleDataException when formatting dates in the app.
+  await initializeDateFormatting('fr_FR');
 
   runApp(
     ChangeNotifierProvider(

@@ -28,9 +28,7 @@ class _OrderSummaryPageState extends State<OrderSummaryPage> {
     final event = Event.fromFirestore(eventDoc);
 
     DocumentSnapshot? userDoc;
-    if (event.userId != null) {
-      userDoc = await FirebaseFirestore.instance.collection('users').doc(event.userId).get();
-    }
+    userDoc = await FirebaseFirestore.instance.collection('users').doc(event.userId).get();
 
     final prestationsSnapshot = await eventDoc.reference.collection('selected_prestations').get();
     final prestations = prestationsSnapshot.docs.map((doc) => doc.data()).toList();
@@ -154,7 +152,7 @@ class _OrderSummaryPageState extends State<OrderSummaryPage> {
             subtitle: Text('Quantité: ${data['quantity']} - ${data['description'] ?? ''}'),
             trailing: Text('${data['totalPrice']} FCFA'),
           );
-        }).toList(),
+        }),
       ],
     );
   }
@@ -201,15 +199,15 @@ class _OrderSummaryPageState extends State<OrderSummaryPage> {
               onPressed: () {
                 final total = _calculateTotal(prestations);
                 context.go(
-                  '/event-details/${widget.eventId}/summary/payment',
+                  '/my-events/details/${widget.eventId}/summary/payment',
                   extra: total,
                 );
               },
-              child: const Text('Payer maintenant'),
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(vertical: 16),
                 textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
               ),
+              child: const Text('Payer maintenant'),
             ),
           ),
           const SizedBox(height: 8),
@@ -222,7 +220,7 @@ class _OrderSummaryPageState extends State<OrderSummaryPage> {
               // GoRouter.of(context).go('/event-details/${widget.eventId}/prestations');
               // For simplicity, we can just pop twice if the flow is always summary -> prestations
               // Or use context.go if we want to be explicit
-              GoRouter.of(context).go('/event-details/${widget.eventId}/prestations');
+              GoRouter.of(context).go('/my-events/details/${widget.eventId}/prestations');
             },
             child: const Text('Modifier les prestations'),
           ),

@@ -37,19 +37,28 @@ class _PaymentVerificationPageState extends State<PaymentVerificationPage> {
   }
 
   Future<void> _simulatePaymentProcess() async {
-    // Simulate a delay for payment processing
-    await Future.delayed(const Duration(seconds: 4));
+    print('Starting payment simulation...');
+    try {
+      // Simulate a delay for payment processing
+      await Future.delayed(const Duration(seconds: 4));
 
-    // Randomly decide success or failure for demonstration
-    final bool success = DateTime.now().second % 2 != 0; // 50% chance of success
+      // Randomly decide success or failure for demonstration
+      final bool success = DateTime.now().second % 2 != 0; // 50% chance of success
 
-    if (mounted) {
-      if (success) {
-        await _logTransaction('success');
-        context.go('/event-details/${widget.eventId}/summary/payment/success');
-      } else {
-        await _logTransaction('failure', failureReason: 'Fonds insuffisants (simulé)');
-        context.go('/event-details/${widget.eventId}/summary/payment/failure');
+      if (mounted) {
+        if (success) {
+          await _logTransaction('success');
+          context.go('/my-events/details/${widget.eventId}/summary/payment/success');
+        } else {
+          await _logTransaction('failure', failureReason: 'Fonds insuffisants (simulé)');
+          context.go('/my-events/details/${widget.eventId}/summary/payment/failure');
+        }
+      }
+    } catch (e) {
+      print('Error in payment simulation: $e');
+      if (mounted) {
+        await _logTransaction('failure', failureReason: e.toString());
+        context.go('/my-events/details/${widget.eventId}/summary/payment/failure');
       }
     }
   }

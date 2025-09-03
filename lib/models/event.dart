@@ -4,6 +4,7 @@ class Event {
   final String id;
   final String userId;
   final String eventName;
+  final String eventType;
   final DateTime eventDate;
   final String location;
   final double budget;
@@ -13,6 +14,7 @@ class Event {
     required this.id,
     required this.userId,
     required this.eventName,
+    required this.eventType,
     required this.eventDate,
     required this.location,
     required this.budget,
@@ -26,6 +28,7 @@ class Event {
       id: doc.id,
       userId: data['userId'] ?? '',
       eventName: data['eventName'] ?? '',
+      eventType: data['eventType'] ?? '',
       eventDate: (data['eventDate'] as Timestamp).toDate(),
       location: data['location'] ?? '',
       budget: (data['budget'] ?? 0.0).toDouble(),

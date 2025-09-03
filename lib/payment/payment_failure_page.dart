@@ -13,12 +13,13 @@ class PaymentFailurePage extends StatelessWidget {
         title: const Text('Paiement Échoué'),
         automaticallyImplyLeading: false, // Prevent going back from failure page
       ),
-      body: Center(
-        child: Padding(
-          padding: const EdgeInsets.all(24.0),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
+      body: SingleChildScrollView(
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24.0),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
               Icon(
                 Icons.cancel_outlined,
                 color: Theme.of(context).colorScheme.error,
@@ -50,14 +51,12 @@ class PaymentFailurePage extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: () {
-                    context.go('/event-details/${eventId}/summary/payment'); // Go back to payment methods
-                  },
-                  child: const Text('Réessayer'),
+                  onPressed: () => context.go('/my-events/details/$eventId/summary/payment'), // Go back to payment methods
                   style: ElevatedButton.styleFrom(
                     padding: const EdgeInsets.symmetric(vertical: 16),
                     textStyle: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                   ),
+                  child: const Text('Réessayer'),
                 ),
               ),
               const SizedBox(height: 10),
@@ -78,6 +77,6 @@ class PaymentFailurePage extends StatelessWidget {
           ),
         ),
       ),
-    );
+     ) );
   }
 }
