@@ -208,9 +208,9 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
   Future<void> _updateService(String id, Map<String, dynamic> data) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
-      await _servicesRef.doc(id).update(data);
-      await _logAction('update_service', target: id, details: data);
-      scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Prestation mise à jour')));
+  await _servicesRef.doc(id).update(data);
+  await _logAction('update_service', target: id, details: data);
+  scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Prestation mise à jour')));
     } catch (e) {
       scaffoldMessenger.showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
     }
@@ -615,7 +615,13 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
 
                     Navigator.of(context).pop();
                     if (isEditing) {
-                      _updateService(docId!, serviceData);
+                      final oldPrice = (initialData['price'] as num?)?.toDouble() ?? 0.0;
+                      _updateService(docId, serviceData);
+                      // If price changed, propagate to user events
+                      final newPrice = price;
+                      if (newPrice != oldPrice) {
+                        _propagatePriceToEvents(docId, newPrice);
+                      }
                     } else {
                       _addService(serviceData);
                     }
@@ -740,18 +746,246 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
     );
   }
 
-  Widget _buildMyServicesTab() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.construction, size: 48, color: Colors.grey),
-          SizedBox(height: 16),
-          Text('Contenu de "Mes Services" en cours de développement.', style: TextStyle(color: Colors.grey)),
-        ],
+  /// Propagate a service price change to all events that have selected this service.
+  /// Only updates `price` and `totalPrice` fields inside `events/{eventId}/selected_prestations/{serviceId}`.
+  Future<void> _propagatePriceToEvents(String serviceId, double newPrice) async {
+    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    try {
+      // Fetch all events that have a selected_prestations doc for this service
+      final eventsQuery = await FirebaseFirestore.instance.collection('events').get();
+      final batch = FirebaseFirestore.instance.batch();
+      int updates = 0;
+
+      for (final eventDoc in eventsQuery.docs) {
+        final selRef = eventDoc.reference.collection('selected_prestations').doc(serviceId);
+        final selSnap = await selRef.get();
+        if (!selSnap.exists) continue;
+  final selData = selSnap.data() ?? <String, dynamic>{};
+  final quantity = (selData['quantity'] as num?)?.toInt() ?? 0;
+        final updated = {
+          'price': newPrice,
+          'totalPrice': newPrice * quantity,
+        };
+        batch.update(selRef, updated);
+        updates += 1;
+      }
+
+      if (updates > 0) {
+        await batch.commit();
+      }
+
+      await _logAction('propagate_price', target: serviceId, details: {'newPrice': newPrice, 'updatedEntries': updates});
+      if (mounted) scaffoldMessenger.showSnackBar(SnackBar(content: Text('Prix propagé vers $updates prestations sélectionnées')));
+    } catch (e) {
+      if (mounted) scaffoldMessenger.showSnackBar(SnackBar(content: Text('Erreur propagation prix: ${e.toString()}')));
+    }
+  }
+
+  Future<void> _showRegistrantsForEventType(String eventType) async {
+    final parentContext = context;
+    // Avoid a composite index requirement by not ordering here; keep it simple for the admin list.
+    final q = await FirebaseFirestore.instance.collection('events').where('eventType', isEqualTo: eventType).limit(200).get();
+    final docs = q.docs;
+    if (!mounted) return;
+
+    showDialog<void>(
+      context: parentContext,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('Inscrits — ${eventType[0].toUpperCase()}${eventType.substring(1)}'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: docs.isEmpty
+              ? const Text('Aucun inscrit pour ce type d\'événement.')
+              : ListView.builder(
+                  shrinkWrap: true,
+                  itemCount: docs.length,
+                  itemBuilder: (c, i) {
+                    final d = docs[i];
+                    final data = d.data() as Map<String, dynamic>? ?? {};
+                    final name = data['name'] ?? data['eventName'] ?? 'Événement';
+                    final createdBy = data['createdBy'] ?? data['userId'] ?? '—';
+                    final date = data['date'] ?? data['createdAt'];
+                    return ListTile(
+                      title: Text('$name'),
+                      subtitle: Text('UID: $createdBy • ${_formatTimestamp(date)}'),
+                      onTap: () {
+                        Navigator.of(dialogContext).pop();
+                        // Use parentContext for navigation to avoid using a deactivated dialog context
+                        if (d.id.isNotEmpty) GoRouter.of(parentContext).push('/event/${d.id}');
+                      },
+                    );
+                  },
+                ),
+        ),
+        actions: [TextButton(onPressed: () => Navigator.of(dialogContext).pop(), child: const Text('Fermer'))],
       ),
     );
   }
+
+  Future<void> _showSetBasePriceDialog(String eventType) async {
+  final parentContext = context;
+  final configDoc = await _configRef.doc('base_prices').get();
+    final raw = configDoc.data();
+    final existing = (raw is Map<String, dynamic>) ? (raw[eventType] as num?)?.toDouble() : null;
+    final priceCtl = TextEditingController(text: existing != null ? existing.toStringAsFixed(0) : '');
+    bool propagate = false;
+
+    await showDialog<void>(
+      context: parentContext,
+      builder: (dialogContext) => StatefulBuilder(builder: (dialogContext, setState) {
+        // dialogContext is the dialog's BuildContext; use parentContext for navigation and SnackBars
+        final rootContext = parentContext;
+        return AlertDialog(
+          title: Text('Fixer le prix de base — ${eventType[0].toUpperCase()}${eventType.substring(1)}'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            TextField(controller: priceCtl, decoration: const InputDecoration(labelText: 'Prix (FCFA)'), keyboardType: TextInputType.number),
+            const SizedBox(height: 8),
+            CheckboxListTile(value: propagate, onChanged: (v) => setState(() => propagate = v ?? false), title: const Text('Propager aux événements existants')),
+          ]),
+          actions: [
+            TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
+            TextButton(onPressed: () async {
+              final val = double.tryParse(priceCtl.text.trim());
+              Navigator.of(dialogContext).pop();
+              if (val == null) return;
+              // Save to config/base_prices
+              await _configRef.doc('base_prices').set({eventType: val}, SetOptions(merge: true));
+              await _logAction('set_base_price', target: eventType, details: {'price': val, 'propagate': propagate});
+              if (propagate) {
+                // Update matching events with a 'basePrice' field
+                final q = await FirebaseFirestore.instance.collection('events').where('eventType', isEqualTo: eventType).get();
+                final batch = FirebaseFirestore.instance.batch();
+                int updated = 0;
+                for (final doc in q.docs) {
+                  batch.update(doc.reference, {'basePrice': val});
+                  updated += 1;
+                }
+                if (updated > 0) await batch.commit();
+                if (mounted) ScaffoldMessenger.of(rootContext).showSnackBar(SnackBar(content: Text('Prix fixé et propagé à $updated événements')));
+              } else {
+                if (mounted) ScaffoldMessenger.of(rootContext).showSnackBar(const SnackBar(content: Text('Prix de base enregistré')));
+              }
+            }, child: const Text('Enregistrer')),
+          ],
+        );
+      }),
+    );
+  }
+
+  Widget _buildMyServicesTab() {
+    // Reuse the same 4 default service tiles shown to users in ServiceCatalogPage.
+    final defaultServices = [
+      {
+        'title': 'MARIAGES',
+        'description': 'Organisation complète',
+        'price': 'À partir de 500,000 FCFA',
+        'icon': Icons.favorite_border,
+        'image': 'assets/images/wedding.jpg',
+        'eventType': 'mariage',
+      },
+      {
+        'title': 'ANNIVERSAIRES',
+        'description': 'Fêtes personnalisées',
+        'price': 'À partir de 150,000 FCFA',
+        'icon': Icons.cake_outlined,
+        'image': 'assets/images/birthday.jpg',
+        'eventType': 'anniversaire',
+      },
+      {
+        'title': 'CONFÉRENCES',
+        'description': 'Événements professionnels',
+        'price': 'Sur devis',
+        'icon': Icons.business_center_outlined,
+        'image': 'assets/images/conference.jpg',
+        'eventType': 'conference',
+      },
+      {
+        'title': 'CÉRÉMONIES FUNÉRAIRES',
+        'description': 'Hommages et organisation',
+        'price': 'Sur devis',
+        'icon': Icons.church_outlined,
+        'image': 'assets/images/funeral.jpg',
+        'eventType': 'funerailles',
+      },
+    ];
+
+    final basePricesStream = _configRef.doc('base_prices').snapshots();
+    return StreamBuilder<DocumentSnapshot>(
+      stream: basePricesStream,
+      builder: (context, snap) {
+        final baseData = (snap.data?.data() as Map<String, dynamic>?) ?? {};
+        return RefreshIndicator(
+          onRefresh: _handleAdminRefresh,
+          child: ListView.builder(
+            padding: const EdgeInsets.all(16.0),
+            itemCount: defaultServices.length,
+            itemBuilder: (context, index) {
+              final service = defaultServices[index];
+              final eventType = service['eventType'] as String;
+              final baseVal = baseData[eventType];
+              final originalPrice = service['price'] as String;
+              final prefixMatch = RegExp(r'^\D*').firstMatch(originalPrice);
+              final prefix = prefixMatch?.group(0) ?? '';
+              final priceText = (baseVal is num) ? '$prefix${baseVal.toDouble().toStringAsFixed(0)} FCFA' : originalPrice;
+
+              return Card(
+                elevation: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      height: 150,
+                      color: Theme.of(context).colorScheme.secondary.withAlpha(51),
+                      child: Center(
+                        child: Icon(
+                          service['icon'] as IconData,
+                          size: 50,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                        Text(service['title'] as String, style: Theme.of(context).textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold)),
+                        const SizedBox(height: 8),
+                        Text(service['description'] as String, style: Theme.of(context).textTheme.bodyLarge),
+                        const SizedBox(height: 8),
+                        Text(priceText, style: Theme.of(context).textTheme.titleMedium?.copyWith(color: Theme.of(context).colorScheme.secondary, fontWeight: FontWeight.w600)),
+                      ]),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.end,
+                        children: [
+                          TextButton(onPressed: () => _showRegistrantsForEventType(service['eventType'] as String), child: const Text('Inscrits')),
+                          const SizedBox(width: 8),
+                          TextButton(onPressed: () => _showSetBasePriceDialog(service['eventType'] as String), child: const Text('Fixer prix')),
+                          const SizedBox(width: 8),
+                          ElevatedButton(
+                            onPressed: () {
+                              final eventType = service['eventType'] as String;
+                              context.go('/create-event/$eventType');
+                            },
+                            child: const Text('Réserver maintenant'),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        );
+      },
+    );
+  }
+
 
   @override
   Widget build(BuildContext context) {

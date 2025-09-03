@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class ServiceCatalogPage extends StatelessWidget {
   const ServiceCatalogPage({super.key});
@@ -46,77 +47,91 @@ class ServiceCatalogPage extends StatelessWidget {
       },
     ];
 
+    // Listen to base prices in config to show updated prices when the admin sets them.
+    final basePricesRef = FirebaseFirestore.instance.collection('config').doc('base_prices');
     return Scaffold(
       appBar: AppBar(
         title: const Text('Nos Services'),
         backgroundColor: colorScheme.primary,
         foregroundColor: colorScheme.onPrimary,
       ),
-      body: ListView.builder(
-        padding: const EdgeInsets.all(16.0),
-        itemCount: services.length,
-        itemBuilder: (context, index) {
-          final service = services[index];
-          return Card(
-            elevation: 4,
-            margin: const EdgeInsets.only(bottom: 16),
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-            clipBehavior: Clip.antiAlias,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Placeholder for an image
-                Container(
-                  height: 150,
-                  color: colorScheme.secondary.withAlpha(51),
-                  child: Center(
-                    child: Icon(
-                      service['icon'] as IconData,
-                      size: 50,
-                      color: colorScheme.primary,
-                    ),
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        service['title'] as String,
-                        style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        service['description'] as String,
-                        style: theme.textTheme.bodyLarge,
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        service['price'] as String,
-                        style: theme.textTheme.titleMedium?.copyWith(
-                          color: colorScheme.secondary,
-                          fontWeight: FontWeight.w600,
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: basePricesRef.snapshots(),
+        builder: (context, snap) {
+          final baseData = (snap.data?.data() as Map<String, dynamic>?) ?? {};
+          return ListView.builder(
+            padding: const EdgeInsets.all(16.0),
+            itemCount: services.length,
+            itemBuilder: (context, index) {
+              final service = services[index];
+              final eventType = service['eventType'] as String;
+              final baseVal = baseData[eventType];
+              final originalPrice = service['price'] as String;
+              final prefixMatch = RegExp(r'^\D*').firstMatch(originalPrice);
+              final prefix = prefixMatch?.group(0) ?? '';
+              final priceText = (baseVal is num) ? '$prefix${baseVal.toDouble().toStringAsFixed(0)} FCFA' : originalPrice;
+
+              return Card(
+                elevation: 4,
+                margin: const EdgeInsets.only(bottom: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Placeholder for an image
+                    Container(
+                      height: 150,
+                      color: colorScheme.secondary.withAlpha(51),
+                      child: Center(
+                        child: Icon(
+                          service['icon'] as IconData,
+                          size: 50,
+                          color: colorScheme.primary,
                         ),
                       ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: ElevatedButton(
-                      onPressed: () {
-                        final eventType = service['eventType'] as String;
-                        context.go('/create-event/$eventType');
-                      },
-                      child: const Text('Réserver maintenant'),
                     ),
-                  ),
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            service['title'] as String,
+                            style: theme.textTheme.headlineSmall?.copyWith(fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            service['description'] as String,
+                            style: theme.textTheme.bodyLarge,
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            priceText,
+                            style: theme.textTheme.titleMedium?.copyWith(
+                              color: colorScheme.secondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                      child: Align(
+                        alignment: Alignment.centerRight,
+                        child: ElevatedButton(
+                          onPressed: () {
+                            context.go('/create-event/${service['eventType'] as String}');
+                          },
+                          child: const Text('Réserver maintenant'),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ],
-            ),
+              );
+            },
           );
         },
       ),
