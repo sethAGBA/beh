@@ -6,6 +6,7 @@ import 'package:beh/widgets/service_detail_modal.dart';
 import 'package:beh/models/service.dart';
 import 'package:beh/models/event.dart';
 import 'package:beh/event_details_page.dart';
+import 'package:beh/event_creation_page.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -1039,7 +1040,8 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
                           ElevatedButton(
                             onPressed: () {
                               final eventType = service['eventType'] as String;
-                              context.go('/create-event/$eventType');
+                              // Open EventCreationPage via Navigator so admin doesn't switch the main shell
+                              Navigator.of(context).push(MaterialPageRoute(builder: (c) => EventCreationPage(eventType: eventType)));
                             },
                             child: const Text('Réserver maintenant'),
                           ),
