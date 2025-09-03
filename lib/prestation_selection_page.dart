@@ -3,6 +3,7 @@ import 'package:beh/models/service.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:collection/collection.dart';
+import 'package:beh/widgets/service_detail_modal.dart';
 
 class PrestationSelectionPage extends StatefulWidget {
   final String eventId;
@@ -222,32 +223,40 @@ Widget _buildFoodCuisineTab(String cuisineType) {
 }
 
   Widget _buildServiceListItem(Service service) {
-    return Card(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      child: Padding(
-        padding: const EdgeInsets.all(12.0),
-        child: Row(
-          children: [
-            // You can add an image here later
-            // if (service.imageUrl != null && service.imageUrl!.isNotEmpty)
-            //   Image.network(service.imageUrl!, width: 80, height: 80, fit: BoxFit.cover),
-            // const SizedBox(width: 12),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(service.name, style: Theme.of(context).textTheme.titleLarge),
-                  if (service.description != null && service.description!.isNotEmpty) ...[
+    return InkWell(
+      onTap: () {
+        showDialog(
+          context: context,
+          builder: (context) => ServiceDetailModal(service: service),
+        );
+      },
+      child: Card(
+        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Row(
+            children: [
+              // You can add an image here later
+              // if (service.imageUrl != null && service.imageUrl!.isNotEmpty)
+              //   Image.network(service.imageUrl!, width: 80, height: 80, fit: BoxFit.cover),
+              // const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(service.name, style: Theme.of(context).textTheme.titleLarge),
+                    if (service.description != null && service.description!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(service.description!, style: Theme.of(context).textTheme.bodyMedium),
+                    ],
                     const SizedBox(height: 4),
-                    Text(service.description!, style: Theme.of(context).textTheme.bodyMedium),
+                    Text('${service.price.toStringAsFixed(0)} FCFA', style: Theme.of(context).textTheme.titleMedium),
                   ],
-                  const SizedBox(height: 4),
-                  Text('${service.price.toStringAsFixed(0)} FCFA', style: Theme.of(context).textTheme.titleMedium),
-                ],
+                ),
               ),
-            ),
-            PrestationCounter(eventId: widget.eventId, service: service),
-          ],
+              PrestationCounter(eventId: widget.eventId, service: service),
+            ],
+          ),
         ),
       ),
     );

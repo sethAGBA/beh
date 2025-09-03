@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
+import 'package:beh/widgets/service_detail_modal.dart';
+import 'package:beh/models/service.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -490,6 +492,13 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
                               ),
                             ],
                           ),
+                          onTap: () {
+                            final service = Service.fromFirestore(doc);
+                            showDialog(
+                              context: context,
+                              builder: (context) => ServiceDetailModal(service: service, isAdminView: true),
+                            );
+                          },
                         );
                       }).toList(),
                     );

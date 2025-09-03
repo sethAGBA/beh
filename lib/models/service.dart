@@ -12,6 +12,8 @@ class Service {
   final String? decoType;
   final String? foodCuisine;
   final String? foodCourse;
+  final bool? available;
+  final dynamic createdAt;
 
 
   Service({
@@ -24,6 +26,8 @@ class Service {
     this.decoType,
     this.foodCuisine,
     this.foodCourse,
+    this.available,
+    this.createdAt,
   });
 
   factory Service.fromFirestore(DocumentSnapshot doc) {
@@ -38,6 +42,8 @@ class Service {
       decoType: data['deco_type'] as String?,
       foodCuisine: data['food_cuisine'] as String?,
       foodCourse: data['food_course'] as String?,
+      available: data['available'] as bool?,
+      createdAt: data['createdAt'],
     );
   }
 }
