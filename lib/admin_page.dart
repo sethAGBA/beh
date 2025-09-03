@@ -4,6 +4,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:go_router/go_router.dart';
 import 'package:beh/widgets/service_detail_modal.dart';
 import 'package:beh/models/service.dart';
+import 'package:beh/models/event.dart';
+import 'package:beh/event_details_page.dart';
 
 class AdminPage extends StatefulWidget {
   const AdminPage({super.key});
@@ -805,13 +807,13 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
                     final name = data['name'] ?? data['eventName'] ?? 'Événement';
                     final createdBy = data['createdBy'] ?? data['userId'] ?? '—';
                     final date = data['date'] ?? data['createdAt'];
-                    return ListTile(
+          return ListTile(
                       title: Text('$name'),
                       subtitle: Text('UID: $createdBy • ${_formatTimestamp(date)}'),
                       onTap: () {
                         Navigator.of(dialogContext).pop();
-                        // Use parentContext for navigation to avoid using a deactivated dialog context
-                        if (d.id.isNotEmpty) GoRouter.of(parentContext).push('/event/${d.id}');
+            // Show a lightweight details dialog for admins instead of navigating into the full user screen
+            if (d.id.isNotEmpty) _showEventDetailsDialog(d.id, parentContext);
                       },
                     );
                   },
@@ -870,6 +872,74 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
         );
       }),
     );
+  }
+
+  /// Show a compact event details dialog for admin so they can inspect an event without navigating
+  Future<void> _showEventDetailsDialog(String eventId, BuildContext parentContext) async {
+    try {
+      final eventDoc = await FirebaseFirestore.instance.collection('events').doc(eventId).get();
+      if (!eventDoc.exists) {
+        if (mounted) ScaffoldMessenger.of(parentContext).showSnackBar(const SnackBar(content: Text('Événement introuvable')));
+        return;
+      }
+
+      final eventData = eventDoc.data() as Map<String, dynamic>? ?? {};
+      final event = Event.fromFirestore(eventDoc);
+
+      final prestationsSnap = await eventDoc.reference.collection('selected_prestations').get();
+      final prestations = prestationsSnap.docs.map((d) => d.data()).toList();
+      final spentBudget = prestations.fold<double>(0.0, (sum, p) => sum + ((p['totalPrice'] as num?)?.toDouble() ?? 0.0));
+
+      if (!mounted) return;
+
+      showDialog<void>(
+        context: parentContext,
+        builder: (context) {
+          return AlertDialog(
+            title: Text(event.eventName),
+            content: SizedBox(
+              width: double.maxFinite,
+              child: SingleChildScrollView(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('Type: ${event.eventType}'),
+                  const SizedBox(height: 8),
+                  Text('Date: ${_formatTimestamp(eventData['date'] ?? eventData['createdAt'])}'),
+                  const SizedBox(height: 8),
+                  Text('Budget: ${event.budget.toStringAsFixed(0)} FCFA'),
+                  const SizedBox(height: 8),
+                  Text('Dépensé: ${spentBudget.toStringAsFixed(0)} FCFA'),
+                  const SizedBox(height: 12),
+                  const Text('Prestations sélectionnées:', style: TextStyle(fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  if (prestations.isEmpty) const Text('Aucune prestation sélectionnée.'),
+                  if (prestations.isNotEmpty)
+                    ...prestations.map((p) {
+                      final name = p['name'] ?? p['serviceName'] ?? 'Prestation';
+                      final qty = (p['quantity'] as num?)?.toInt() ?? 0;
+                      final price = (p['price'] as num?)?.toDouble() ?? 0.0;
+                      final total = (p['totalPrice'] as num?)?.toDouble() ?? (price * qty);
+                      return ListTile(title: Text('$name'), subtitle: Text('x$qty • ${price.toStringAsFixed(0)} FCFA'), trailing: Text('${total.toStringAsFixed(0)} FCFA'));
+                    }).toList(),
+                ]),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Fermer')),
+              TextButton(onPressed: () {
+                Navigator.of(context).pop();
+                // Open EventDetailsPage directly via Navigator to avoid switching the app shell
+                Navigator.of(parentContext).push(MaterialPageRoute(
+                  builder: (c) => EventDetailsPage(eventId: eventId),
+                  fullscreenDialog: true,
+                ));
+              }, child: const Text('Ouvrir')),
+            ],
+          );
+        },
+      );
+    } catch (e) {
+      if (mounted) ScaffoldMessenger.of(parentContext).showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
+    }
   }
 
   Widget _buildMyServicesTab() {
