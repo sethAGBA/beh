@@ -248,7 +248,7 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
         for (final t in transactions) {
           final tRaw = t.data();
           final val = (tRaw is Map<String, dynamic>) ? tRaw['amount'] : null;
-          if (val is num) totalRevenue += val.toDouble();
+          totalRevenue += _parseAmount(val);
         }
 
         return RefreshIndicator(
@@ -377,6 +377,16 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
     } catch (_) {
       return t.toString();
     }
+  }
+
+  double _parseAmount(dynamic val) {
+    if (val == null) return 0.0;
+    if (val is num) return val.toDouble();
+    if (val is String) {
+      final cleaned = val.replaceAll(RegExp(r"[^0-9\.,-]"), '').replaceAll(',', '');
+      return double.tryParse(cleaned) ?? 0.0;
+    }
+    return 0.0;
   }
 
   Future<void> _showUserActivity(String uid) async {
@@ -651,7 +661,7 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
         for (final d in docs) {
           final dRaw = d.data();
           final v = (dRaw is Map<String, dynamic>) ? dRaw['amount'] : null;
-          if (v is num) total += v.toDouble();
+          total += _parseAmount(v);
         }
         return RefreshIndicator(
           onRefresh: _handleAdminRefresh,
@@ -663,7 +673,7 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
                 final d = docs[i];
                 final dRaw = d.data();
                 final data = (dRaw is Map<String, dynamic>) ? dRaw : <String, dynamic>{};
-                return ListTile(title: Text(data['description'] ?? 'Transaction'), subtitle: Text('${(data['amount'] ?? 0).toString()} FCFA'));
+                return ListTile(title: Text(data['description'] ?? 'Transaction'), subtitle: Text('${_parseAmount(data['amount']).toStringAsFixed(0)} FCFA'));
               }),
             ]),
           ),
