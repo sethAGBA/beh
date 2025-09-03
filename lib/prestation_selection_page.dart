@@ -2,6 +2,7 @@
 import 'package:beh/models/service.dart';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:collection/collection.dart';
 
 class PrestationSelectionPage extends StatefulWidget {
   final String eventId;
@@ -38,6 +39,8 @@ class _PrestationSelectionPageState extends State<PrestationSelectionPage> with 
             Tab(text: 'Décoration'),
             Tab(text: 'Nourriture'),
           ],
+          labelColor: Theme.of(context).colorScheme.surface,
+          unselectedLabelColor: Colors.white70,
         ),
       ),
       body: TabBarView(
@@ -90,64 +93,63 @@ class _PrestationSelectionPageState extends State<PrestationSelectionPage> with 
     );
   }
 
-  Widget _buildDecorationTab() {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('services')
-          .where('category', isEqualTo: 'décoration')
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text('Erreur: ${snapshot.error}'));
-        }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const Center(child: Text('Aucune prestation de décoration trouvée.'));
-        }
-
-        final services = snapshot.data!.docs.map((doc) => Service.fromFirestore(doc)).toList();
-
-        return ListView.builder(
-          itemCount: services.length,
-          itemBuilder: (context, index) {
-            final service = services[index];
-            return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Row(
-                  children: [
-                    // You can add an image here later
-                    // Image.network(service.imageUrl ?? '', width: 80, height: 80, fit: BoxFit.cover),
-                    // const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(service.name, style: Theme.of(context).textTheme.titleLarge),
-                          Text('${service.price.toStringAsFixed(0)} FCFA', style: Theme.of(context).textTheme.titleMedium),
-                        ],
-                      ),
-                    ),
-                    PrestationCounter(eventId: widget.eventId, service: service),
-                  ],
-                ),
-              ),
-            );
-          },
+Widget _buildDecorationTab() {
+  return StreamBuilder<QuerySnapshot>(
+    stream: FirebaseFirestore.instance
+        .collection('services')
+        .where('main_category', isEqualTo: 'Décoration')
+        .where('available', isEqualTo: true)
+        .snapshots(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      if (snapshot.hasError) {
+        return Center(child: Text('Erreur: ${snapshot.error}'));
+      }
+      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        return const Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.palette, size: 48, color: Colors.grey),
+              SizedBox(height: 16),
+              Text('Aucune prestation de décoration trouvée.', style: TextStyle(color: Colors.grey)),
+            ],
+          ),
         );
-      },
-    );
-  }
+      }
+
+      final services = snapshot.data!.docs.map((doc) => Service.fromFirestore(doc)).toList();
+      final groupedServices = groupBy(services, (Service service) => service.decoType ?? 'Autre');
+
+      final sortedKeys = groupedServices.keys.toList()..sort();
+
+      return ListView.builder(
+        itemCount: sortedKeys.length,
+        itemBuilder: (context, index) {
+          final decoType = sortedKeys[index];
+          final typeServices = groupedServices[decoType]!;
+          return ExpansionTile(
+            title: Text(decoType, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            initiallyExpanded: true,
+            children: typeServices.map((service) => _buildServiceListItem(service)).toList(),
+          );
+        },
+      );
+    },
+  );
+}
 
   Widget _buildNourritureTab() {
     return DefaultTabController(
       length: 2,
       child: Column(
         children: [
-          const TabBar(
+ TabBar(
+ labelColor: Theme.of(context).colorScheme.primary,
+            unselectedLabelColor: Colors.black,
+            indicatorColor: Colors.white,
             tabs: [
               Tab(text: 'Cuisine Africaine'),
               Tab(text: 'Cuisine Européenne'),
@@ -156,8 +158,8 @@ class _PrestationSelectionPageState extends State<PrestationSelectionPage> with 
           Expanded(
             child: TabBarView(
               children: [
-                _buildFoodCategoryTab('africaine'),
-                _buildFoodCategoryTab('europeenne'),
+                _buildFoodCuisineTab('Africaine'),
+                _buildFoodCuisineTab('Européenne'),
               ],
             ),
           ),
@@ -166,70 +168,88 @@ class _PrestationSelectionPageState extends State<PrestationSelectionPage> with 
     );
   }
 
-  Widget _buildFoodCategoryTab(String cuisineType) {
-    final categories = ['entree', 'plat', 'dessert'];
+Widget _buildFoodCuisineTab(String cuisineType) {
+  return StreamBuilder<QuerySnapshot>(
+    stream: FirebaseFirestore.instance
+        .collection('services')
+        .where('main_category', isEqualTo: 'Nourriture')
+        .where('food_cuisine', isEqualTo: cuisineType)
+        .where('available', isEqualTo: true)
+        .snapshots(),
+    builder: (context, snapshot) {
+      if (snapshot.connectionState == ConnectionState.waiting) {
+        return const Center(child: CircularProgressIndicator());
+      }
+      if (snapshot.hasError) {
+        return Center(child: Text('Erreur: ${snapshot.error}'));
+      }
+      if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+        return Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(Icons.restaurant_menu, size: 48, color: Colors.grey),
+              SizedBox(height: 16),
+              Text('Aucune prestation de cuisine $cuisineType trouvée.', style: TextStyle(color: Colors.grey)),
+            ],
+          ),
+        );
+      }
 
-    return ListView.builder(
-      itemCount: categories.length,
-      itemBuilder: (context, index) {
-        final category = categories[index];
+      final services = snapshot.data!.docs.map((doc) => Service.fromFirestore(doc)).toList();
+      final groupedServices = groupBy(services, (Service service) => service.foodCourse ?? 'Autre');
+
+      final sortedKeys = groupedServices.keys.toList()
+        ..sort((a, b) {
+          const order = ['Entrée', 'Plat', 'Dessert', 'Autre'];
+          return order.indexOf(a).compareTo(order.indexOf(b));
+        });
+
+      return ListView.builder(
+        itemCount: sortedKeys.length,
+        itemBuilder: (context, index) {
+          final course = sortedKeys[index];
+          final courseServices = groupedServices[course]!;
           return ExpansionTile(
-          title: Text('${category[0].toUpperCase()}${category.substring(1)}s'),
-          children: [_buildFoodList(cuisineType, category)],
-        );
-      },
-    );
-  }
+            title: Text(course, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+            initiallyExpanded: true,
+            children: courseServices.map((service) => _buildServiceListItem(service)).toList(),
+          );
+        },
+      );
+    },
+  );
+}
 
-  Widget _buildFoodList(String cuisineType, String foodCategory) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('services')
-          .where('category', isEqualTo: 'nourriture_${cuisineType}_$foodCategory')
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (snapshot.connectionState == ConnectionState.waiting) {
-          return const Center(child: CircularProgressIndicator());
-        }
-        if (snapshot.hasError) {
-          return Center(child: Text('Erreur: ${snapshot.error}'));
-        }
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const ListTile(title: Text('Aucun plat disponible dans cette catégorie.'));
-        }
-
-        final services = snapshot.data!.docs.map((doc) => Service.fromFirestore(doc)).toList();
-
-        return ListView.builder(
-          shrinkWrap: true,
-          physics: const NeverScrollableScrollPhysics(),
-          itemCount: services.length,
-          itemBuilder: (context, index) {
-            final service = services[index];
-            // For food, we can use the same counter logic
-            return Card(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-              child: Padding(
-                padding: const EdgeInsets.all(12.0),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(service.name, style: Theme.of(context).textTheme.titleLarge),
-                          Text('${service.price.toStringAsFixed(0)} FCFA', style: Theme.of(context).textTheme.titleMedium),
-                        ],
-                      ),
-                    ),
-                    PrestationCounter(eventId: widget.eventId, service: service),
+  Widget _buildServiceListItem(Service service) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Row(
+          children: [
+            // You can add an image here later
+            // if (service.imageUrl != null && service.imageUrl!.isNotEmpty)
+            //   Image.network(service.imageUrl!, width: 80, height: 80, fit: BoxFit.cover),
+            // const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(service.name, style: Theme.of(context).textTheme.titleLarge),
+                  if (service.description != null && service.description!.isNotEmpty) ...[
+                    const SizedBox(height: 4),
+                    Text(service.description!, style: Theme.of(context).textTheme.bodyMedium),
                   ],
-                ),
+                  const SizedBox(height: 4),
+                  Text('${service.price.toStringAsFixed(0)} FCFA', style: Theme.of(context).textTheme.titleMedium),
+                ],
               ),
-            );
-          },
-        );
-      },
+            ),
+            PrestationCounter(eventId: widget.eventId, service: service),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -247,15 +267,16 @@ class PrestationCounter extends StatefulWidget {
 class _PrestationCounterState extends State<PrestationCounter> {
   int _quantity = 0;
 
+  DocumentReference get _docRef => FirebaseFirestore.instance
+      .collection('events')
+      .doc(widget.eventId)
+      .collection('selected_prestations')
+      .doc(widget.service.id);
+
   @override
   Widget build(BuildContext context) {
     return StreamBuilder<DocumentSnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('events')
-          .doc(widget.eventId)
-          .collection('selected_prestations')
-          .doc(widget.service.id)
-          .snapshots(),
+      stream: _docRef.snapshots(),
       builder: (context, snapshot) {
         if (snapshot.hasData && snapshot.data!.exists) {
           final data = snapshot.data!.data() as Map<String, dynamic>;
@@ -282,35 +303,31 @@ class _PrestationCounterState extends State<PrestationCounter> {
   }
 
   void _increment() {
-    setState(() {
-      _quantity++;
-    });
-    _updatePrestation();
+    _updatePrestation(_quantity + 1);
   }
 
   void _decrement() {
-    setState(() {
-      _quantity--;
-    });
-    _updatePrestation();
+    if (_quantity > 0) {
+      _updatePrestation(_quantity - 1);
+    }
   }
 
-  void _updatePrestation() {
-    final docRef = FirebaseFirestore.instance
-        .collection('events')
-        .doc(widget.eventId)
-        .collection('selected_prestations')
-        .doc(widget.service.id);
-
-    if (_quantity > 0) {
-      docRef.set({
+  void _updatePrestation(int newQuantity) {
+    if (newQuantity > 0) {
+      _docRef.set({
         'name': widget.service.name,
-        'quantity': _quantity,
+        'quantity': newQuantity,
         'price': widget.service.price,
-        'totalPrice': widget.service.price * _quantity,
-      });
+        'totalPrice': widget.service.price * newQuantity,
+        // Also save the service details for easy summary later
+        'main_category': widget.service.mainCategory,
+        'deco_type': widget.service.decoType,
+        'food_cuisine': widget.service.foodCuisine,
+        'food_course': widget.service.foodCourse,
+      }, SetOptions(merge: true));
     } else {
-      docRef.delete();
+      _docRef.delete();
     }
+    // No need for setState, StreamBuilder will rebuild
   }
 }

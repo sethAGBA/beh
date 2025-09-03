@@ -188,19 +188,15 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
     }
   }
 
-  Future<void> _addService(String name, double price, String category, String description, String imageUrl) async {
+  Future<void> _addService(Map<String, dynamic> serviceData) async {
     final scaffoldMessenger = ScaffoldMessenger.of(context);
     try {
       final doc = await _servicesRef.add({
-        'name': name,
-        'price': price,
-        'category': category,
-        'description': description,
-        'imageUrl': imageUrl,
+        ...serviceData,
         'available': true,
         'createdAt': FieldValue.serverTimestamp(),
       });
-      await _logAction('add_service', target: doc.id, details: {'name': name, 'price': price, 'category': category});
+      await _logAction('add_service', target: doc.id, details: serviceData);
       scaffoldMessenger.showSnackBar(const SnackBar(content: Text('Prestation ajoutée')));
     } catch (e) {
       scaffoldMessenger.showSnackBar(SnackBar(content: Text('Erreur: ${e.toString()}')));
@@ -428,65 +424,101 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
 
   Widget _buildServicesTab() {
     return StreamBuilder<QuerySnapshot>(
-      stream: _servicesRef.snapshots(),
+      stream: _servicesRef.orderBy('main_category').orderBy('name').snapshots(),
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) return const Center(child: CircularProgressIndicator());
         if (snapshot.hasError) return Center(child: Text('Erreur: ${snapshot.error}'));
         final docs = snapshot.data?.docs ?? [];
+
+        // Group services
+        final Map<String, List<QueryDocumentSnapshot>> groupedServices = {};
+        for (final doc in docs) {
+          final data = doc.data() as Map<String, dynamic>?;
+          final category = data?['main_category'] as String? ?? 'Non classé';
+          (groupedServices[category] ??= []).add(doc);
+        }
+
+        final sortedKeys = groupedServices.keys.toList()..sort();
+
         return RefreshIndicator(
           onRefresh: _handleAdminRefresh,
-          child: SingleChildScrollView(
-            physics: const AlwaysScrollableScrollPhysics(),
-            child: Column(children: [
+          child: Column(
+            children: [
               Padding(
                 padding: const EdgeInsets.all(12.0),
-                child: ElevatedButton.icon(onPressed: _showAddServiceDialog, icon: const Icon(Icons.add), label: const Text('Ajouter prestation')),
+                child: ElevatedButton.icon(
+                  onPressed: () => _showServiceDialog(),
+                  icon: const Icon(Icons.add),
+                  label: const Text('Ajouter prestation'),
+                ),
               ),
-              ListView.builder(
-                physics: const NeverScrollableScrollPhysics(),
-                shrinkWrap: true,
-                itemCount: docs.length,
-                itemBuilder: (context, index) {
-                  final d = docs[index];
-                  final dRaw = d.data();
-                  final data = (dRaw is Map<String, dynamic>) ? dRaw : <String, dynamic>{};
-                  final name = data['name'] ?? '—';
-                  final price = (data['price'] is num) ? (data['price'] as num).toDouble() : 0.0;
-                  final available = data['available'] ?? true;
-                  final category = data['category'] ?? 'Non classé';
-                  return ListTile(
-                    title: Text(name),
-                    subtitle: Text('$category - ${price.toStringAsFixed(0)} FCFA'),
-                    trailing: Row(mainAxisSize: MainAxisSize.min, children: [
-                      IconButton(icon: Icon(available ? Icons.visibility : Icons.visibility_off), onPressed: () => _updateService(d.id, {'available': !available})),
-                      IconButton(icon: const Icon(Icons.edit_outlined), onPressed: () => _showEditServiceDialog(d.id, data)),
-                    ]),
-                  );
-                },
+              Expanded(
+                child: ListView.builder(
+                  itemCount: sortedKeys.length,
+                  itemBuilder: (context, index) {
+                    final category = sortedKeys[index];
+                    final services = groupedServices[category]!;
+                    return ExpansionTile(
+                      title: Text(category, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      initiallyExpanded: true,
+                      children: services.map((doc) {
+                        final data = doc.data() as Map<String, dynamic>;
+                        final name = data['name'] ?? '—';
+                        final price = (data['price'] as num?)?.toDouble() ?? 0.0;
+                        final available = data['available'] ?? true;
+
+                        String subtitle = '';
+                        if (category == 'Décoration') {
+                          subtitle = data['deco_type'] ?? '';
+                        } else if (category == 'Nourriture') {
+                          subtitle = '${data['food_cuisine']} - ${data['food_course']}';
+                        }
+
+                        return ListTile(
+                          title: Text(name),
+                          subtitle: Text('$subtitle - ${price.toStringAsFixed(0)} FCFA'),
+                          trailing: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              IconButton(
+                                icon: Icon(available ? Icons.visibility : Icons.visibility_off),
+                                onPressed: () => _updateService(doc.id, {'available': !available}),
+                              ),
+                              IconButton(
+                                icon: const Icon(Icons.edit_outlined),
+                                onPressed: () => _showServiceDialog(docId: doc.id, initialData: data),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  },
+                ),
               ),
-            ]),
+            ],
           ),
         );
       },
     );
   }
 
-  void _showAddServiceDialog() {
-    final nameCtl = TextEditingController();
-    final priceCtl = TextEditingController();
-    final descCtl = TextEditingController();
-    final imgCtl = TextEditingController();
-    String selectedCategory = 'décoration';
+  void _showServiceDialog({String? docId, Map<String, dynamic>? initialData}) {
+    final isEditing = docId != null && initialData != null;
+    final nameCtl = TextEditingController(text: isEditing ? initialData['name'] : '');
+    final priceCtl = TextEditingController(text: isEditing ? initialData['price'].toString() : '');
+    final descCtl = TextEditingController(text: isEditing ? initialData['description'] : '');
+    final imgCtl = TextEditingController(text: isEditing ? initialData['imageUrl'] : '');
 
-    final categories = [
-      'décoration',
-      'nourriture_africaine_entree',
-      'nourriture_africaine_plat',
-      'nourriture_africaine_dessert',
-      'nourriture_europeenne_entree',
-      'nourriture_europeenne_plat',
-      'nourriture_europeenne_dessert',
-    ];
+    String? mainCategory = isEditing ? initialData['main_category'] : null;
+    String? decoType = isEditing ? initialData['deco_type'] : null;
+    String? foodCuisine = isEditing ? initialData['food_cuisine'] : null;
+    String? foodCourse = isEditing ? initialData['food_course'] : null;
+
+    final mainCategories = ['Décoration', 'Nourriture'];
+    final decoTypes = ['Simple', 'Moderne', 'Luxueuse'];
+    final foodCuisines = ['Africaine', 'Européenne'];
+    final foodCourses = ['Entrée', 'Plat', 'Dessert'];
 
     showDialog<void>(
       context: context,
@@ -494,36 +526,55 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              insetPadding: EdgeInsets.symmetric(horizontal: 20.0),
-              title: const Text('Ajouter prestation'),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
+              title: Text(isEditing ? 'Modifier prestation' : 'Ajouter prestation'),
               content: SingleChildScrollView(
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  TextField(controller: nameCtl, decoration: const InputDecoration(labelText: 'Nom')),
-                  TextField(controller: priceCtl, decoration: const InputDecoration(labelText: 'Prix'), keyboardType: TextInputType.number),
-                  TextField(controller: descCtl, decoration: const InputDecoration(labelText: 'Description')),
-                  TextField(controller: imgCtl, decoration: const InputDecoration(labelText: 'URL de l\'image')),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: selectedCategory,
-                          items: categories.map((String category) {
-                            return DropdownMenuItem<String>(
-                              value: category,
-                              child: Text(category, overflow: TextOverflow.ellipsis),
-                            );
-                          }).toList(),
-                          onChanged: (newValue) {
-                            setState(() {
-                              selectedCategory = newValue!;
-                            });
-                          },
-                          decoration: const InputDecoration(labelText: 'Catégorie'),
-                        ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    DropdownButtonFormField<String>(
+                      value: mainCategory,
+                      hint: const Text('Catégorie principale'),
+                      items: mainCategories.map((cat) => DropdownMenuItem(value: cat, child: Text(cat))).toList(),
+                      onChanged: (value) => setState(() => mainCategory = value),
+                      decoration: const InputDecoration(labelText: 'Catégorie principale'),
+                    ),
+                    if (mainCategory == 'Décoration') ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: decoType,
+                        hint: const Text('Type de décoration'),
+                        items: decoTypes.map((type) => DropdownMenuItem(value: type, child: Text(type))).toList(),
+                        onChanged: (value) => setState(() => decoType = value),
+                        decoration: const InputDecoration(labelText: 'Type de décoration'),
                       ),
                     ],
-                  ),
-                ]),
+                    if (mainCategory == 'Nourriture') ...[
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: foodCuisine,
+                        hint: const Text('Type de cuisine'),
+                        items: foodCuisines.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                        onChanged: (value) => setState(() => foodCuisine = value),
+                        decoration: const InputDecoration(labelText: 'Cuisine'),
+                      ),
+                      const SizedBox(height: 12),
+                      DropdownButtonFormField<String>(
+                        value: foodCourse,
+                        hint: const Text('Type de plat'),
+                        items: foodCourses.map((c) => DropdownMenuItem(value: c, child: Text(c))).toList(),
+                        onChanged: (value) => setState(() => foodCourse = value),
+                        decoration: const InputDecoration(labelText: 'Plat'),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    TextField(controller: nameCtl, decoration: const InputDecoration(labelText: 'Nom')),
+                    TextField(controller: priceCtl, decoration: const InputDecoration(labelText: 'Prix'), keyboardType: TextInputType.number),
+                    TextField(controller: descCtl, decoration: const InputDecoration(labelText: 'Description')),
+                    TextField(controller: imgCtl, decoration: const InputDecoration(labelText: 'URL de l\'image'))
+                  ],
+                ),
               ),
               actions: [
                 TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
@@ -533,91 +584,35 @@ class _AdminPageState extends State<AdminPage> with SingleTickerProviderStateMix
                     final price = double.tryParse(priceCtl.text.trim()) ?? 0.0;
                     final description = descCtl.text.trim();
                     final imageUrl = imgCtl.text.trim();
+
+                    if (name.isEmpty || mainCategory == null) return;
+
+                    Map<String, dynamic> serviceData = {
+                      'name': name,
+                      'price': price,
+                      'description': description,
+                      'imageUrl': imageUrl,
+                      'main_category': mainCategory,
+                    };
+
+                    if (mainCategory == 'Décoration') {
+                      if (decoType == null) return;
+                      serviceData['deco_type'] = decoType;
+                    } else if (mainCategory == 'Nourriture') {
+                      if (foodCuisine == null || foodCourse == null) return;
+                      serviceData['food_cuisine'] = foodCuisine;
+                      serviceData['food_course'] = foodCourse;
+                    }
+
                     Navigator.of(context).pop();
-                    if (name.isNotEmpty) {
-                      _addService(name, price, selectedCategory, description, imageUrl);
+                    if (isEditing) {
+                      _updateService(docId!, serviceData);
+                    } else {
+                      _addService(serviceData);
                     }
                   },
-                  child: const Text('Ajouter'),
+                  child: const Text('Enregistrer'),
                 ),
-              ],
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _showEditServiceDialog(String id, Map<String, dynamic> data) {
-    final nameCtl = TextEditingController(text: data['name']);
-    final priceCtl = TextEditingController(text: data['price'].toString());
-    final descCtl = TextEditingController(text: data['description']);
-    final imgCtl = TextEditingController(text: data['imageUrl']);
-    String selectedCategory = data['category'] ?? 'décoration';
-
-    final categories = [
-      'décoration',
-      'nourriture_africaine_entree',
-      'nourriture_africaine_plat',
-      'nourriture_africaine_dessert',
-      'nourriture_europeenne_entree',
-      'nourriture_europeenne_plat',
-      'nourriture_europeenne_dessert',
-    ];
-
-    showDialog<void>(
-      context: context,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            return AlertDialog(
-              insetPadding: EdgeInsets.symmetric(horizontal: 20.0),
-              title: const Text('Modifier prestation'),
-              content: SingleChildScrollView(
-                child: Column(mainAxisSize: MainAxisSize.min, children: [
-                  TextField(controller: nameCtl, decoration: const InputDecoration(labelText: 'Nom')),
-                  TextField(controller: priceCtl, decoration: const InputDecoration(labelText: 'Prix'), keyboardType: TextInputType.number),
-                  TextField(controller: descCtl, decoration: const InputDecoration(labelText: 'Description')),
-                  TextField(controller: imgCtl, decoration: const InputDecoration(labelText: 'URL de l\'image')),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: DropdownButtonFormField<String>(
-                          value: selectedCategory,
-                          items: categories.map((String category) {
-                            return DropdownMenuItem<String>(
-                              value: category,
-                              child: Text(category, overflow: TextOverflow.ellipsis),
-                            );
-                          }).toList(),
-                          onChanged: (newValue) {
-                            setState(() {
-                              selectedCategory = newValue!;
-                            });
-                          },
-                          decoration: const InputDecoration(labelText: 'Catégorie'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ]),
-              ),
-              actions: [
-                TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Annuler')),
-                TextButton(onPressed: () {
-                  final name = nameCtl.text.trim();
-                  final price = double.tryParse(priceCtl.text.trim()) ?? 0.0;
-                  final description = descCtl.text.trim();
-                  final imageUrl = imgCtl.text.trim();
-                  Navigator.of(context).pop();
-                  _updateService(id, {
-                    'name': name,
-                    'price': price,
-                    'category': selectedCategory,
-                    'description': description,
-                    'imageUrl': imageUrl,
-                  });
-                }, child: const Text('Enregistrer')),
               ],
             );
           },
